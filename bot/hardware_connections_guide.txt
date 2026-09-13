@@ -1,0 +1,132 @@
+===============================================================================
+MASTER END-TO-END HARDWARE INTEGRATION GUIDE: NUMINA HIGH SCHOOL ROBOT
+===============================================================================
+Target System: Raspberry Pi 5 (2GB) with Monitor Swap & 100nF Audio Modification
+Document Version: 2.0 (Complete Comprehensive Hardware Layout)
+
+This file contains the absolute end-to-end master hardware schematic map for the
+Numina teaching robot. Every component from the input switches, status indicator 
+LED arrays, custom audio path adapters, to the SPI-driven MAX7219 LED Matrix is 
+laid out step-by-step with explicit pin-to-pin definitions.
+
+-------------------------------------------------------------------------------
+SECTION 1: ISOLATED POWER DISTRIBUTION TOPOLOGY
+-------------------------------------------------------------------------------
+The PAM8403 Amplifier experiences high peak currents (up to 3A). To avoid logic
+voltage brownouts or damage to the Raspberry Pi 5, the power lines are completely
+isolated onto parallel distribution rails.
+
+A. Power Source Inbound:
+   1. Connect Main 27W Power Delivery Adapter Output V+ (5V, 5A) to Power
+      Distribution Board Rail A (+).
+   2. Connect Main 27W Power Delivery Adapter Output V- (GND) to Power
+      Distribution Board Rail B (-).
+
+B. Logic Branch (Raspberry Pi 5):
+   1. Route a thick line from Distribution Rail A (+) to RPi 5 Physical Pin 2 (+5V).
+   2. Route a thick line from Distribution Rail B (-) to RPi 5 Physical Pin 6 (GND).
+
+C. Audio Branch (PAM8403 Amplifier):
+   1. Route a thick line from Distribution Rail A (+) to the PAM8403 Power "+" terminal.
+   2. Route a thick line from Distribution Rail B (-) to the PAM8403 Power "-" terminal.
+   3. Capacitor Filtering: Mount your 100uF 25V Electrolytic Filtering Capacitor
+      directly across the PAM8403 Power "+" and Power "-" terminals.
+      *CRITICAL ASPECT*: Ensure the capacitor's negative lead (indicated by the 
+      silver/white stripe on the body) is aligned perfectly with the Power "-" pin.
+
+-------------------------------------------------------------------------------
+SECTION 2: 6-BUTTON CONTROL INTERFACE MATRIX MAP (INTERNAL PULL-UP STATE)
+-------------------------------------------------------------------------------
+To bypass structural breadboard crowding, all six interaction momentary buttons 
+are wired directly between their specific Raspberry Pi 5 GPIO sensing pin and a
+common shared Ground (GND) rail. Software will initialize internal pull-up profiles.
+
+- BUTTON 1: START SWITCH
+  * Button Terminal 1 -> Raspberry Pi 5 Physical Pin 13 (GPIO 27)
+  * Button Terminal 2 -> Shared Ground Rail (e.g., Physical Pin 9 / Common GND)
+
+- BUTTON 2: EMERGENCY STOP SWITCH
+  * Button Terminal 1 -> Raspberry Pi 5 Physical Pin 15 (GPIO 22)
+  * Button Terminal 2 -> Shared Ground Rail
+
+- BUTTON 3: NAVIGATION UP SWITCH
+  * Button Terminal 1 -> Raspberry Pi 5 Physical Pin 16 (GPIO 23)
+  * Button Terminal 2 -> Shared Ground Rail
+
+- BUTTON 4: NAVIGATION DOWN SWITCH
+  * Button Terminal 1 -> Raspberry Pi 5 Physical Pin 18 (GPIO 24)
+  * Button Terminal 2 -> Shared Ground Rail
+
+- BUTTON 5: NAVIGATION LEFT SWITCH
+  * Button Terminal 1 -> Raspberry Pi 5 Physical Pin 22 (GPIO 25)
+  * Button Terminal 2 -> Shared Ground Rail
+
+- BUTTON 6: NAVIGATION RIGHT SWITCH
+  * Button Terminal 1 -> Raspberry Pi 5 Physical Pin 37 (GPIO 26)
+  * Button Terminal 2 -> Shared Ground Rail
+
+-------------------------------------------------------------------------------
+SECTION 3: SYSTEM STATUS INDICATOR LED TELEMETRY BLOCK
+-------------------------------------------------------------------------------
+Every status indicator LED features a dedicated inline 220 Ohm current-limiting 
+resistor protecting the GPIO lines from excessive current draw.
+
+- LED MODULE 1: GREEN STATUS LED (IDLE / READY STATE)
+  * RPi 5 Physical Pin 31 (GPIO 6) -> Leg A of 220 Ohm Resistor
+  * Leg B of 220 Ohm Resistor -> Green LED Anode (Long Lead)
+  * Green LED Cathode (Short Lead) -> Main Ground Rail
+
+- LED MODULE 2: YELLOW STATUS LED (PROCESSING STATE)
+  * RPi 5 Physical Pin 33 (GPIO 13) -> Leg A of 220 Ohm Resistor
+  * Leg B of 220 Ohm Resistor -> Yellow LED Anode (Long Lead)
+  * Yellow LED Cathode (Short Lead) -> Main Ground Rail
+
+- LED MODULE 3: RED STATUS LED (FAULT / EMERGENCY STOP STATE)
+  * RPi 5 Physical Pin 35 (GPIO 19) -> Leg A of 220 Ohm Resistor
+  * Leg B of 220 Ohm Resistor -> Red LED Anode (Long Lead)
+  * Red LED Cathode (Short Lead) -> Main Ground Rail
+
+-------------------------------------------------------------------------------
+SECTION 4: LOGITECH MONO HEADSET ADAPTATION & AUDIO ROUTING
+-------------------------------------------------------------------------------
+Since the 10uF smoothing capacitors are missing, the 100nF (0.1uF) ceramic 
+capacitors are deployed on the audio output signal lines to act as vital DC-blocking 
+high-pass filters. This ensures audio clarity and prevents amplifier overheating.
+
+A. Microphone Input Execution (Pink Port Splicing):
+   1. Identify the two raw wires from the stripped Logitech mono headset mic capsule.
+   2. Solder the White Wire (Mic Signal +) concurrently to the Tip (Left) and 
+      Ring (Right) solder terminals of the panel-mount 3.5mm TRS female socket.
+   3. Solder the Bare Wire (Mic Ground -) to the Sleeve (Ground) terminal of the socket.
+   4. Connect this jack directly to the Pink Microphone Port on the Waveshare USB Sound Card.
+
+B. Sound Card to PAM8403 Amplifier Inputs:
+   1. Waveshare Sound Card Green Port (Headphone Out) Left Channel Pin -> 
+      Leg A of 100nF Ceramic Capacitor.
+   2. Leg B of that first 100nF Ceramic Capacitor -> PAM8403 "L" (Left Input) pin.
+   3. Waveshare Sound Card Green Port (Headphone Out) Right Channel Pin -> 
+      Leg A of a second 100nF Ceramic Capacitor.
+   4. Leg B of that second 100nF Ceramic Capacitor -> PAM8403 "R" (Right Input) pin.
+   5. Waveshare Sound Card Green Port Ground Pin -> Direct wire to PAM8403 "G" 
+      (Input Audio Ground) terminal pin.
+
+C. Amplifier Outputs to Logitech Mono Speaker:
+   1. Connect the Logitech Speaker Positive (+) wire to PAM8403 "Lout+" terminal.
+   2. Connect the Logitech Speaker Negative (-) wire to PAM8403 "Lout-" terminal.
+   3. Leave the Rout+ and Rout- terminals completely unpopulated (Mono layout configuration).
+
+-------------------------------------------------------------------------------
+SECTION 5: MAX7219 8x8 LED MATRIX DISPLAY BUS ARRAY
+-------------------------------------------------------------------------------
+The 8x8 LED Dot-Matrix display utilizes the high-speed hardware SPI bus channels
+on the Raspberry Pi 5 to draw interactive facial expressions and characters.
+
+1. MAX7219 VCC Pin  -> Raspberry Pi 5 Physical Pin 4 (+5V Core Logic Power)
+2. MAX7219 GND Pin  -> Raspberry Pi 5 Physical Pin 9 (GND)
+3. MAX7219 DIN Pin  -> Raspberry Pi 5 Physical Pin 19 (GPIO 10 / Hardware SPI_MOSI)
+4. MAX7219 CS Pin   -> Raspberry Pi 5 Physical Pin 24 (GPIO 8 / Hardware SPI_CE0)
+5. MAX7219 CLK Pin  -> Raspberry Pi 5 Physical Pin 23 (GPIO 11 / Hardware SPI_SCLK)
+
+===============================================================================
+END OF HARDWARE FILE MAP - ALL INTEGRATED HARDWARE SYSTEMS VERIFIED PIN-TO-PIN
+===============================================================================

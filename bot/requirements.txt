@@ -1,0 +1,7 @@
+# Raspberry Pi runtime dependencies for numina.py
+# Install with: pip install -r requirements.txt
+
+RPi.GPIO
+pygame
+luma.core
+luma.led-matrix

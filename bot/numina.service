@@ -1,0 +1,19 @@
+
+```ini
+[Unit]
+Description=Numina Solderless Educational Assistant Core Lifecycle Engine
+After=multi-user.target sound.target display-manager.target
+Wants=sound.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/numina
+Environment=PYTHONUNBUFFERED=1
+# Forces core python scripts to pipe structural stdout direct to internal kernel logs
+ExecStart=/usr/bin/python3 /home/pi/numina/numina_main.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

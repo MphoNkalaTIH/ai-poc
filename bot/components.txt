@@ -1,0 +1,39 @@
+so these are my components but then 
+    1. I am using mic and speaker from a stripped logitech mono headset and 
+    2. I lost the Radial Capacitors 10uF
+
+## Component list with spec
+
+- Raspberry Pi 5 - 2GB Single Board Computer, spec: Official Raspberry Pi 5 (2GB RAM model)
+- Official Raspberry Pi 5 Active Cooler, spec: Custom aluminum heatsink with temperature-controlled PWM fan
+- USB-C 27W PD Power Supply, spec: Official Raspberry Pi 5V 5A Power Delivery Adapter
+- GPIO 40-Pin Rainbow Ribbon Cable (30cm), spec: 40-Pin IDC Female-to-Female Ribbon Wire, 2.54mm Pitch
+- Raspberry Pi Camera Module 3, spec: 12MP Sony IMX708, Wide-Angle (120° Lens), Autofocus
+- Clear Acrylic Camera Stand, spec: V2/Module 3 clear housing with Raspberry Pi Zero mounting holes
+- I2S MEMS Microphone Module, spec: SPH0645LM4H chip based digital audio board for clean digital input
+- Miniature Bass Speaker 4 Ohm 3W, spec: 57mm Outer Diameter Cone Speaker, High Sensitivity
+- 8x8 LED Matrix Module, spec: MAX7219 Driver Interface, Red Color Array
+- PAM8403 Audio Amplifier Board, spec: 3W+3W Class D Dual Channel Stereo Amp with Built-In Potentiometer
+- 3.5mm Stereo Audio Jack, spec: TRS 4-Pin Female Panel Mount Socket, Type A (4 Pack)
+- Main Rocker Power Switch, spec: KCD1-101 3-Pin SPDT On-Off Toggle (4 Pack)
+- AMS1117 Linear Regulator Module, spec: Step-Down Power Down Converter Board (3.3V Fixed Output)
+- Logic Level Converter, spec: 4-Channel Bidirectional I2C/SPI Level Shifter (5V to 3.3V)
+- Tactile Push Buttons, spec: 12x12mm Momentary Button Switch set with 7 Multi-color Caps
+- Resistors 10K Ohm, spec: 0.25W Metal Film Through-Hole Resistors (50 Pack)
+- Ceramic Capacitors 100nF, spec: 0.1uF Decoupling Capacitor, 5.08mm Pitch (25 Pack)
+- Radial Capacitors 100uF, spec: 25V Electrolytic Filtering Capacitors (10 Pack)
+- Radial Capacitors 10uF, spec: 25V Audio Coupling Smooth Capacitors (20 Pack)
+- Rubber Feet Square, spec: Self-Adhesive Silicone Bumpers (20 Pack)
+- M3 Brass Threaded Inserts, spec: 5mm x 5mm Knurled Heat-Set Inserts for Enclosures (20 Pack)
+- M3 Phillips Machine Screws, spec: 8mm Length Countersunk Flat-Head Bolts (20 Pack)
+- Jumper Cables Male to Male Ribbon, spec: 20cm Length, 40 Wires per Ribbon, 2.54mm Pitch
+- Jumper Cables Female to Female Ribbon, spec: 20cm Length, 40 Wires per Ribbon, 2.54mm Pitch
+- Jumper Cables Male to Female Ribbon, spec: 20cm Length, 40 Wires per Ribbon, 2.54mm Pitch
+- Breadboard (Full Size), spec: 830 Solderless Tie-Points with Dual Power Rails
+- USB Power Analyzer Multimeter, spec: UM25C Bluetooth Enabled OLED Power Diagnostic Meter
+- Raspberry Pi Pico H (Alternative Logic Analyzer), spec: RP2040 Microcontroller, Configurable as 24MHz Logic Analyzer Probe via Sigrok
+- High-Temperature Polyimide Tape, spec: 30mm x 33m Insulating Kapton Tape Roll, Max 300°C
+- SanDisk Ultra 32GB MicroSD HC Card (already have), spec: Class 10, UHS-I, A1 Rated, 120MB/s Read Speed (User Owned Baseline)
+- Official Raspberry Pi Micro-HDMI to HDMI Cable (1M), spec: Male Micro-HDMI (Type D) to Male Standard HDMI (Type A), Black
+- USB Sound Card (Driver-Free), spec: Plug-and-Play Stereo Codec, Audio Input/Output 3.5mm Jacks
+- Takealot Portable Mini LED Projector (Teardown Variant), spec: Single-LCD Panel Engine, Manual Focal Lens, 1x HDMI Input, 12V DC Input
