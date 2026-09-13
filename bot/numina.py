@@ -21,10 +21,6 @@ DOWN_PIN = 24    # Physical Pin 18
 LEFT_PIN = 25    # Physical Pin 22
 RIGHT_PIN = 26   # Physical Pin 37
 
-LED_GREEN = 6    # Physical Pin 31 (Idle/Ready Status)
-LED_YELLOW = 13  # Physical Pin 33 (Processing/Working Status)
-LED_RED = 19     # Physical Pin 35 (Error/Emergency Shutdown)
-
 # ============================================================================== 
 # 2. RUNTIME ASSET DIRECTORY CONVENTIONS
 # ==============================================================================
@@ -51,11 +47,6 @@ def setup_hardware():
     for pin in [START_PIN, ESTOP_PIN, UP_PIN, DOWN_PIN, LEFT_PIN, RIGHT_PIN]:
         GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
-    # Configure telemetry alert status indicators
-    for pin in [LED_GREEN, LED_YELLOW, LED_RED]:
-        GPIO.setup(pin, GPIO.OUT)
-        GPIO.output(pin, GPIO.LOW)
-
     # Register emergency-stop interrupt only after GPIO is configured.
     GPIO.add_event_detect(ESTOP_PIN, GPIO.FALLING, callback=emergency_stop_callback, bouncetime=200)
 
@@ -75,10 +66,15 @@ def setup_hardware():
 
 
 def set_status(state):
-    """Updates physical LED indicators to showcase system operational context."""
-    GPIO.output(LED_GREEN, GPIO.HIGH if state == "idle" else GPIO.LOW)
-    GPIO.output(LED_YELLOW, GPIO.HIGH if state == "processing" else GPIO.LOW)
-    GPIO.output(LED_RED, GPIO.HIGH if state == "error" else GPIO.LOW)
+    """Uses the MAX7219 matrix to indicate the robot's live status."""
+    if state == "idle":
+        draw_matrix_glyph("idle")
+    elif state == "processing":
+        draw_matrix_glyph("processing")
+    elif state == "error":
+        draw_matrix_glyph("error")
+    else:
+        draw_matrix_glyph("clear")
 
 
 def draw_matrix_glyph(glyph_type):
@@ -89,7 +85,24 @@ def draw_matrix_glyph(glyph_type):
         return
 
     with canvas(device_matrix) as draw:
-        if glyph_type == "smile":
+        if glyph_type == "clear":
+            device_matrix.clear()
+        elif glyph_type == "idle":
+            # Small center dot = ready / idle state
+            for x, y in [(3, 3), (3, 4), (4, 3), (4, 4)]:
+                draw.point((x, y), fill="white")
+        elif glyph_type == "processing":
+            # Animated progress bar pattern for active processing
+            for x in range(8):
+                if x % 2 == 0:
+                    draw.point((x, 3), fill="white")
+                    draw.point((x, 4), fill="white")
+        elif glyph_type == "error":
+            # Large X mark for fault / emergency stop state
+            for x, y in [(0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7),
+                         (0, 7), (1, 6), (2, 5), (3, 4), (4, 3), (5, 2), (6, 1), (7, 0)]:
+                draw.point((x, y), fill="white")
+        elif glyph_type == "smile":
             # Draw basic smiling face bounding coordinate dots
             draw.point((1, 2), fill="white")
             draw.point((1, 5), fill="white")
@@ -105,7 +118,7 @@ def draw_matrix_glyph(glyph_type):
                 draw.point((3, x), fill="white")
             draw.point((2, 4), fill="white")
             draw.point((4, 5), fill="white")
-        elif glyph_type == "clear":
+        else:
             device_matrix.clear()
 
 
@@ -339,9 +352,6 @@ def run_numina_engine():
         GPIO.setwarnings(False)
         for pin in [START_PIN, ESTOP_PIN, UP_PIN, DOWN_PIN, LEFT_PIN, RIGHT_PIN]:
             GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        for pin in [LED_GREEN, LED_YELLOW, LED_RED]:
-            GPIO.setup(pin, GPIO.OUT)
-            GPIO.output(pin, GPIO.LOW)
         GPIO.add_event_detect(ESTOP_PIN, GPIO.FALLING, callback=emergency_stop_callback, bouncetime=200)
         print("[LOOP F17.1] Ready for the next learner session.")
 
