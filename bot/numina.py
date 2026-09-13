@@ -238,49 +238,53 @@ def run_numina_engine():
     print("======================================================")
 
     while True:
-        # F1.0 & F2.0: SYSTEM STANDBY INITIALIZATION PHASE
+        # F1.0 / F2.0: standby and startup ready state
         set_status("idle")
         draw_matrix_glyph("clear")
         print("\n[STANDBY F1.0] Awaiting user initialization signal via START switch...")
         wait_for_press([START_PIN])
 
-        # F3.0: SYSTEM VOICE INITIALIZATION ONBOARDING AUDIO INTRO
+        # F3.0: intro and onboarding
         set_status("processing")
         draw_matrix_glyph("smile")
         print("[ONBOARDING F3.0] Executing digital audio intro audio framework...")
         play_audio(AUDIO_INTRO)
 
-        # F4.0: GRADE EVALUATION SELECTION MATRIX SEQUENCE
+        # F4.0: select grade
         print("[CONFIG F4.0] Select target study grade (Grade 9 through Grade 12).")
         selected_grade = select_grade()
 
-        # F5.0: TOPIC SPECIFICATION INTERFACE NAVIGATION
+        # F5.0: select topic
         print("[CONFIG F5.0] Select educational domain concept block. Press START to save.")
         concept_array = ["Linear Algebra", "Geometry Proofs", "Physics Dynamics", "Chemistry Moles"]
         selected_concept = select_option(concept_array, "Current Domain Selection")
         print(f"[OK] Concept parameter configured successfully: {selected_concept}")
 
-        # F6.0: TRACK ROUTING PARSER SELECTION DECISION
+        # F6.0: select lesson vs problem path
         print("[ROUTING F6.0] Select Mode: [UP Key] Lesson Package | [DOWN Key] Problem Matrix Solver")
         mode_branch = wait_for_press([UP_PIN, DOWN_PIN])
 
         if mode_branch == UP_PIN:
-            # ------------------------------------------------------------------
-            # STRUCTURAL LESSON PATHWAY TRACK (F7.0 -> F10.0)
-            # ------------------------------------------------------------------
+            # Lesson pathway: F7.0 -> F10.0
             print("[TRACK A] Deploying structured curriculum package F7.0...")
             print("[MEDIA F8.0] Syncing video stream visuals with microphone audio instructions...")
             play_video(VIDEO_LESSON)
             play_audio(AUDIO_GUIDE)
+
             print("[EVALUATION F9.0] Pushing verification checklist challenge block...")
             print(" -> Interact to complete assessment quiz challenge: [UP for True | DOWN for False]")
-            wait_for_press([UP_PIN, DOWN_PIN])
+            quiz_answer = wait_for_press([UP_PIN, DOWN_PIN])
+            if quiz_answer == UP_PIN:
+                print("[CHECK F9.1] Student answered correctly. Moving to concept reinforcement.")
+            else:
+                print("[CHECK F9.2] Student answered incorrectly. Revising the concept with guided audio.")
+                play_audio(AUDIO_GUIDE)
+
             print("[FACT OUTPUT F10.0] Directing real-world applications summary context block...")
             play_audio(AUDIO_FACT)
+
         else:
-            # ------------------------------------------------------------------
-            # COMPILATION PROBLEM SOLVER PATHWAY TRACK (F11.0 -> F14.0)
-            # ------------------------------------------------------------------
+            # Problem pathway: F11.0 -> F14.0
             print("[TRACK B] Deploying analytical scanner processor pipeline F11.0...")
             print(" -> Choose Input Source: [LEFT Key] Capture Camera Module | [RIGHT Key] Sample Storage")
             capture_mode = wait_for_press([LEFT_PIN, RIGHT_PIN])
@@ -300,7 +304,6 @@ def run_numina_engine():
                 "Divide both sides by coefficients -> x = 5",
             ]
 
-            # F13.0: Step by step walkthrough output
             print("[GUIDE F13.0] Reviewing calculated mathematical derivations step-by-step...")
             for step_data in mock_steps:
                 print(f" -> Core Instruction: {step_data}")
@@ -309,12 +312,16 @@ def run_numina_engine():
             play_audio(AUDIO_GUIDE)
             print(" -> [Control Interaction] Tap RIGHT button to progress workflow...")
             wait_for_press([RIGHT_PIN])
-            print("[CHECK F14.0] Verifying understanding matrix parameters. [UP for understood | DOWN for confused]")
-            wait_for_press([UP_PIN, DOWN_PIN])
 
-        # ----------------------------------------------------------------------
-        # CLOSING WRAP UP CYCLE ROUTINES (F15.0 -> F17.0)
-        # ----------------------------------------------------------------------
+            print("[CHECK F14.0] Verifying understanding matrix parameters. [UP for understood | DOWN for confused]")
+            understanding = wait_for_press([UP_PIN, DOWN_PIN])
+            if understanding == UP_PIN:
+                print("[CHECK F14.1] Learner confirmed understanding. Continue with summary.")
+            else:
+                print("[CHECK F14.2] Learner is still confused. Re-loop through guided explanation.")
+                play_audio(AUDIO_GUIDE)
+
+        # F15.0 -> F17.0: summary and repeat/exit decision
         print("[SUMMARY F15.0] Broadcasting logged classroom progress analytics metrics...")
         play_audio(AUDIO_SUMMARY)
         print("[PROMPT F16.0] 'Do you want to address alternative coursework sections?'")
@@ -328,6 +335,15 @@ def run_numina_engine():
         draw_matrix_glyph("clear")
         GPIO.cleanup()
         print("[TERMINATE COMPLETE] System architecture parked safely.")
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setwarnings(False)
+        for pin in [START_PIN, ESTOP_PIN, UP_PIN, DOWN_PIN, LEFT_PIN, RIGHT_PIN]:
+            GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        for pin in [LED_GREEN, LED_YELLOW, LED_RED]:
+            GPIO.setup(pin, GPIO.OUT)
+            GPIO.output(pin, GPIO.LOW)
+        GPIO.add_event_detect(ESTOP_PIN, GPIO.FALLING, callback=emergency_stop_callback, bouncetime=200)
+        print("[LOOP F17.1] Ready for the next learner session.")
 
 
 if __name__ == "__main__":
