@@ -1,0 +1,196 @@
+NUMINA PI 5 SYSTEM INSTRUCTIONS
+================================
+
+Purpose
+-------
+This device is the home teaching and guidance bot for Grades 9-12 learners.
+It runs a GPIO-driven teaching flow, plays audio, displays lesson media, and can capture a math problem from the camera for guided explanation.
+
+Machine
+-------
+- Host: Raspberry Pi 5
+- User: pi
+- OS: Raspberry Pi OS (64-bit recommended)
+- Python: Python 3
+- Working folder for this project: /home/pi/numina
+
+Required folder layout
+----------------------
+Create these folders on the Pi before starting the bot:
+
+  mkdir -p /home/pi/numina/audio
+  mkdir -p /home/pi/numina/video
+  mkdir -p /home/pi/numina/capture
+
+Place the following files in /home/pi/numina:
+
+  /home/pi/numina/numina.py
+  /home/pi/numina/numina.service
+  /home/pi/numina/audio/intro.mp3
+  /home/pi/numina/audio/guide_step.mp3
+  /home/pi/numina/audio/fun_fact.mp3
+  /home/pi/numina/audio/summary.mp3
+  /home/pi/numina/video/lesson_viz.mp4
+  /home/pi/numina/capture/problem_input.jpg
+
+If the script is named differently on the Pi, make sure the service points to the real file name.
+
+Python dependencies
+-------------------
+Install the required packages:
+
+  sudo apt update
+  sudo apt install -y python3-pip python3-dev
+  pip3 install RPi.GPIO pygame luma.core luma.led-matrix
+
+For audio and video playback support, also ensure:
+
+  sudo apt install -y python3-pygame vlc
+
+If using the camera capture path, also ensure libcamera is available:
+
+  sudo apt install -y libcamera-apps
+
+System startup
+--------------
+To run the script manually:
+
+  cd /home/pi/numina
+  python3 numina.py
+
+To run it as a background system service:
+
+  sudo cp /home/pi/numina/numina.service /etc/systemd/system/numina.service
+  sudo systemctl daemon-reload
+  sudo systemctl enable numina.service
+  sudo systemctl start numina.service
+
+Check status:
+
+  sudo systemctl status numina.service
+
+To stop it:
+
+  sudo systemctl stop numina.service
+
+To restart it:
+
+  sudo systemctl restart numina.service
+
+To view service logs:
+
+  journalctl -u numina.service -f
+
+Important notes for this project
+--------------------------------
+- The script expects the GPIO buttons to be wired with pull-up logic.
+- The START button is used to confirm selections.
+- UP / DOWN are used for grade changes and mode selection.
+- LEFT / RIGHT are used for topic selection and input-source selection.
+- ESTOP is a hard shutdown trigger and must remain wired to a safe shutdown pattern.
+- The MAX7219 LED matrix should be connected to the SPI bus.
+- The audio path is expected to use the USB sound card or the system audio device.
+- If the camera is not available, the app falls back to sample content instead of crashing.
+
+File responsibility map
+----------------------
+- /home/pi/numina/numina.py
+  Main teaching bot logic and GPIO flow
+
+- /home/pi/numina/audio/
+  Audio files used for intro, guidance, facts, and summary playback
+
+- /home/pi/numina/video/
+  Lesson video content
+
+- /home/pi/numina/capture/
+  Captured problem images or camera output
+
+- /etc/systemd/system/numina.service
+  Service file for startup launch on boot
+
+Troubleshooting
+---------------
+1. Script does not start
+   - Check the Python dependencies are installed.
+   - Confirm you are using the correct file name in the service.
+   - Run this manually:
+
+     cd /home/pi/numina
+     python3 numina.py
+
+2. GPIO buttons do nothing
+   - Check that the buttons are wired to GND and the correct GPIO pins.
+   - Confirm the Pi is using BCM numbering.
+   - Confirm the buttons are active-low with pull-up enabled.
+
+3. Audio does not play
+   - Check that the sound card is detected:
+
+     lsusb
+     aplay -l
+
+   - Confirm the audio files exist in /home/pi/numina/audio.
+   - Test the mixer manually:
+
+     python3 -c "import pygame; pygame.mixer.init(); print('ok')"
+
+4. Video does not open
+   - Confirm VLC is installed.
+   - Check the file path exists.
+   - Verify the media file is valid.
+
+5. Camera capture fails
+   - Check the Raspberry Pi camera is enabled in raspi-config.
+   - Confirm the camera ribbon cable is seated correctly.
+   - Use:
+
+     libcamera-hello
+
+   - If the camera is unavailable, the script should fall back to the sample-flow path.
+
+6. Service starts but then stops
+   - Check logs:
+
+     journalctl -u numina.service -n 100 --no-pager
+
+   - Confirm the service file uses the correct script path.
+   - Confirm the user pi has access to the files and folders.
+
+7. The program hangs on a button press
+   - Check the button wiring and pull-up state.
+   - Make sure the button is not permanently grounded.
+   - Check that the script is not waiting for a signal on the wrong GPIO pin.
+
+8. LEDs do not show expected state
+   - Verify the LED anode/cathode wiring.
+   - Confirm each LED has a proper current-limiting resistor.
+   - Check the GPIO numbers match the code.
+
+9. Emergency stop does not work
+   - Confirm the ESTOP pin is physically connected to the button.
+   - Confirm the GPIO interrupt registration happened after GPIO setup.
+   - Check the button is wired as active-low and not floating.
+
+Recommended startup checklist
+-----------------------------
+Before first boot test:
+
+  1. Install dependencies
+  2. Create /home/pi/numina/ folders
+  3. Copy script and media files into place
+  4. Confirm GPIO wiring matches the code
+  5. Confirm audio/video/camera devices are visible
+  6. Test the script manually
+  7. Enable the service
+  8. Start the service and verify logs
+
+The script is intended to run as a teaching assistant, so the expected behaviour is:
+- user presses START
+- selects grade
+- selects topic
+- selects lesson or problem path
+- receives guided instruction or a math problem explanation
+- chooses whether to continue or shut down
+
+This is the expected operational flow for the Pi 5 teaching bot.
