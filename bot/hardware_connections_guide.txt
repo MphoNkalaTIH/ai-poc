@@ -10,7 +10,7 @@ LED arrays, custom audio path adapters, to the SPI-driven MAX7219 LED Matrix is
 laid out step-by-step with explicit pin-to-pin definitions.
 
 -------------------------------------------------------------------------------
-SECTION 1: ISOLATED POWER DISTRIBUTION TOPOLOGY
+SECTION 1: ISOLATED POWER DISTRIBUTION  [done]
 -------------------------------------------------------------------------------
 The PAM8403 Amplifier experiences high peak currents (up to 3A). To avoid logic
 voltage brownouts or damage to the Raspberry Pi 5, the power lines are completely
@@ -35,7 +35,7 @@ C. Audio Branch (PAM8403 Amplifier):
       silver/white stripe on the body) is aligned perfectly with the Power "-" pin.
 
 -------------------------------------------------------------------------------
-SECTION 2: 6-BUTTON CONTROL INTERFACE MATRIX MAP (INTERNAL PULL-UP STATE)
+SECTION 2: 6-BUTTON CONTROL INTERFACE MATRIX MAP (INTERNAL PULL-UP STATE) [done]
 -------------------------------------------------------------------------------
 To bypass structural breadboard crowding, all six interaction momentary buttons 
 are wired directly between their specific Raspberry Pi 5 GPIO sensing pin and a
@@ -66,7 +66,7 @@ common shared Ground (GND) rail. Software will initialize internal pull-up profi
   * Button Terminal 2 -> Shared Ground Rail
 
 -------------------------------------------------------------------------------
-SECTION 3: SYSTEM STATUS INDICATOR LED TELEMETRY BLOCK
+SECTION 3: SYSTEM STATUS INDICATOR LED TELEMETRY BLOCK [done]
 -------------------------------------------------------------------------------
 Every status indicator LED features a dedicated inline 220 Ohm current-limiting 
 resistor protecting the GPIO lines from excessive current draw.
