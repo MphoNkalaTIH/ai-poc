@@ -57,6 +57,7 @@ NAV_BUTTONS = [
 ]
 NAV_KEY_TO_INDEX = {pin: idx for idx, (_, pin) in enumerate(NAV_BUTTONS)}
 NAV_LABEL_TO_PIN = {label: pin for label, pin in NAV_BUTTONS}
+
 GRADE_OPTIONS = [9, 10, 11, 12]
 GRADE_BY_BUTTON = {
     A_PIN: 9,
@@ -234,54 +235,25 @@ def wait_for_press(target_pins, debounce_ms=20):
         time.sleep(0.02)
 
 def select_grade():
-    """Grade selection using A/B/C/D navigation and START to confirm."""
-    current_grade = 9
-    selection_made = False
-    print(" -> Grade selection: A=9 | B=10 | C=11 | D=12")
-    print(f" -> Selected Grade: {current_grade}")
-
-    while True:
-        key = wait_for_press([A_PIN, B_PIN, C_PIN, D_PIN, START_PIN])
-
-        if key == START_PIN:
-            if not selection_made:
-                print("[WAIT] Choose a grade first with A/B/C/D, then press START.")
-                continue
-            print(f"[OK] Grade selection confirmed: Grade {current_grade}")
-            return current_grade
-
-        if key in GRADE_BY_BUTTON:
-            current_grade = GRADE_BY_BUTTON[key]
-            selection_made = True
-            print(f" -> Selected Grade: {current_grade}")
-
+    """Grade selection using explicit A/B/C/D key press to advance directly."""
+    print(" -> Grade selection selection active: [A]=Grade 9 | [B]=Grade 10 | [C]=Grade 11 | [D]=Grade 12")
+    key = wait_for_press([A_PIN, B_PIN, C_PIN, D_PIN])
+    chosen_grade = GRADE_BY_BUTTON[key]
+    print(f"[OK] Grade selection locked and auto-confirmed: Grade {chosen_grade}")
+    return chosen_grade
 
 def select_option(options, label):
-    """Multi-choice selector using A/B/C/D navigation and START as confirm."""
+    """Multi-choice topic selector using structural key parameters to advance directly."""
     if not options:
         return None
-
     display_options = options[:4]
-    current_idx = 0
-    selection_made = False
-    print(f" -> {label}: A={display_options[0]} | B={display_options[1]} | C={display_options[2]} | D={display_options[3]}")
-    print(f" -> {label}: {display_options[current_idx]}")
-
-    while True:
-        key = wait_for_press([A_PIN, B_PIN, C_PIN, D_PIN, START_PIN])
-
-        if key == START_PIN:
-            if not selection_made:
-                print(f"[WAIT] Choose an option first with A/B/C/D, then press START.")
-                continue
-            print(f"[OK] {label} confirmed: {display_options[current_idx]}")
-            return display_options[current_idx]
-
-        if key in NAV_KEY_TO_INDEX:
-            current_idx = NAV_KEY_TO_INDEX[key] % len(display_options)
-            selection_made = True
-            print(f" -> {label}: {display_options[current_idx]}")
-
+    print(f" -> {label}: [A]={display_options[0]} | [B]={display_options[1]} | [C]={display_options[2]} | [D]={display_options[3]}")
+    
+    key = wait_for_press([A_PIN, B_PIN, C_PIN, D_PIN])
+    idx = NAV_KEY_TO_INDEX[key] % len(display_options)
+    chosen_option = display_options[idx]
+    print(f"[OK] {label} locked and auto-confirmed: {chosen_option}")
+    return chosen_option
 
 # ============================================================================== 
 # 5. MULTIMEDIA DEVICE DRIVER OVERLAYS
@@ -307,7 +279,6 @@ def play_audio(file_path):
         print(f"[AUDIO ERROR] Playback error seen: {e}")
         return False
 
-
 def play_video(file_path):
     print(f"[MEDIA] Checking visual resource location: {file_path}")
 
@@ -319,7 +290,6 @@ def play_video(file_path):
     print(f"[VIDEO RUNNING] Streaming visual assets to screen: {file_path}")
     cmd = f"cvlc --no-osd --fullscreen --play-and-exit {file_path} > /dev/null 2>&1"
     subprocess.Popen(cmd, shell=True)
-
 
 def execute_camera_capture(output_path):
     print("[CAMERA MODULE 3] Running autofocus calibration capture routine...")
@@ -344,41 +314,80 @@ def run_numina_engine():
         set_status("idle")
         wait_for_press([START_PIN])
 
+        # F3.0 Onboarding
         set_status("processing")
         draw_matrix_glyph("smile")
         print("[ONBOARDING F3.0] Executing digital audio intro audio framework...")
         play_audio(AUDIO_INTRO)
 
-        print("[CONFIG F4.0] Select target study grade (Grade 9 through Grade 12).")
+        # F4.0 Select Grade
+        print("[CONFIG F4.0] Launching grade curriculum selection module...")
         selected_grade = select_grade()
 
-        print("[CONFIG F5.0] Select educational domain concept block. Press START to save.")
+        # F5.0 Select Topic
+        print("[CONFIG F5.0] Launching domain topic selection panel...")
         concept_array = ["Linear Algebra", "Geometry Proofs", "Physics Dynamics", "Chemistry Moles"]
         selected_concept = select_option(concept_array, "Current Domain Selection")
-        print(f"[OK] Concept parameter configured successfully: {selected_concept}")
 
-        print("[ROUTING F6.0] Select Mode: [A] Lesson Package | [B] Problem Matrix Solver")
+        # F6.0 Path Selection
+        print("[ROUTING F6.0] Select Running Path: [A] Run Lesson Package | [B] Problem Matrix Solver")
         mode_branch = wait_for_press([A_PIN, B_PIN])
 
         if mode_branch == A_PIN:
-            print("[TRACK A] Deploying structured curriculum package F7.0...")
-            print("[MEDIA F8.0] Syncing video stream visuals with microphone audio instructions...")
+            # ------------------------------------------------------------------
+            # TRACK A: EXPLICIT LECTURE & INTERACTIVE GRADING QUIZ ENGINE
+            # ------------------------------------------------------------------
+            print(f"[TRACK A] Initialising structured curriculum module for Grade {selected_grade}: {selected_concept}")
+            print("[MEDIA F8.0] Synchronising video displays with headset audio lectures...")
             play_video(VIDEO_LESSON)
             play_audio(AUDIO_GUIDE)
 
-            print("[EVALUATION F9.0] Pushing verification checklist challenge block...")
-            print(" -> Interact to complete assessment quiz challenge: [A] True | [B] False")
-            quiz_answer = wait_for_press([A_PIN, B_PIN])
-
-            if quiz_answer == A_PIN:
-                print("[CHECK F9.1] Student answered correctly. Moving to concept reinforcement.")
+            print("\n[QUIZ ENGINE F9.0] Starting assessment validation sequence...")
+            score = 0
+            
+            # Question 1
+            print("\n[Q1] Evaluate definition bounds: Is this concept system dimensionally homogeneous?")
+            print(" -> Options: [A] Always True | [B] Conditional | [C] Never True | [D] Insufficient Information")
+            ans1 = wait_for_press([A_PIN, B_PIN, C_PIN, D_PIN])
+            if ans1 == A_PIN:
+                print(" -> [RESULT] Question 1 Correct!")
+                score += 1
             else:
-                print("[CHECK F9.2] Student answered incorrectly. Revising the concept with guided audio.")
+                print(" -> [RESULT] Question 1 Incorrect. (Correct answer was A)")
+
+            # Question 2
+            print("\n[Q2] Identify optimal resolution pathway variables for calculations:")
+            print(" -> Options: [A] Direct substitution | [B] Integration by parts | [C] Matrix inversion | [D] Neglect entirely")
+            ans2 = wait_for_press([A_PIN, B_PIN, C_PIN, D_PIN])
+            if ans2 == C_PIN:
+                print(" -> [RESULT] Question 2 Correct!")
+                score += 1
+            else:
+                print(" -> [RESULT] Question 2 Incorrect. (Correct answer was C)")
+
+            # Grading Calculation Logic Output
+            total_questions = 2
+            percentage = (score / total_questions) * 100
+            print(f"\n======================================================")
+            print(f" [GRADING SUMMARY] Student evaluation completed.")
+            print(f" -> Final Score: {score}/{total_questions} ({percentage:.1f}%)")
+            print(f"======================================================")
+
+            if percentage >= 50.0:
+                print("[CHECK F9.1] Student PASSED evaluation threshold. Showing smile expression matrix.")
+                draw_matrix_glyph("smile")
+            else:
+                print("[CHECK F9.2] Student FAILED evaluation threshold. Directing concept revision instructions.")
+                draw_matrix_glyph("error")
                 play_audio(AUDIO_GUIDE)
 
-            print("[FACT OUTPUT F10.0] Directing real-world applications summary context block...")
+            print("[FACT OUTPUT F10.0] Outputting real-world engineering core applications context...")
             play_audio(AUDIO_FACT)
+            
         else:
+            # ------------------------------------------------------------------
+            # TRACK B: MANUAL PROBLEM SCANNER SOLVER ENVIRONMENT
+            # ------------------------------------------------------------------
             print("[TRACK B] Deploying analytical scanner processor pipeline F11.0...")
             print(" -> Choose Input Source: [C] Capture Camera Module | [D] Sample Storage")
             capture_mode = wait_for_press([C_PIN, D_PIN])
@@ -416,21 +425,22 @@ def run_numina_engine():
                 print("[CHECK F14.2] Learner is still confused. Re-loop through guided explanation.")
                 play_audio(AUDIO_GUIDE)
 
+        # Closeout metrics sequence
         print("[SUMMARY F15.0] Broadcasting logged classroom progress analytics metrics...")
         play_audio(AUDIO_SUMMARY)
         print("[PROMPT F16.0] 'Do you want to address alternative coursework sections?'")
-        print(" -> Action Vector: [A] YES, return to loop | [B] NO, shut down")
+        print(" -> Action Vector: [A] YES, return to loop and clear | [B] NO, shut down robot engine")
         loop_decision = wait_for_press([A_PIN, B_PIN])
 
         if loop_decision == B_PIN:
-            print("[DEEP SLEEP F17.0] Powering down safe core registers.")
+            print("[DEEP SLEEP F17.0] Safely parsing shutdown commands. Powering down safe core registers.")
             break
 
         print("[LOOP F17.1] Re-initializing configuration variables. Ready for the next learner session.")
         draw_matrix_glyph("clear")
-        safe_gpio_cleanup()
 
     print("[TERMINATE COMPLETE] System architecture parked safely.")
+    safe_gpio_cleanup()
 
 
 if __name__ == "__main__":
