@@ -4,15 +4,17 @@ import os
 import subprocess
 import sys
 import time
+
 import pygame
 
-# Suppress luma initialization errors when desktop environment links are unavailable
+# Suppress luma initialization errors when desktop environment links are unavailable.
 os.environ["LUMA_NO_DISPLAY"] = "1"
 
 import RPi.GPIO as GPIO
 from luma.core.interface.serial import noop, spi
 from luma.core.render import canvas
 from luma.led_matrix.device import max7219
+
 
 def is_raspberry_pi_environment():
     """Return True only when the app is running on an actual Raspberry Pi OS host."""
@@ -23,6 +25,7 @@ def is_raspberry_pi_environment():
     except Exception:
         return False
 
+
 def require_raspberry_pi_runtime():
     if not is_raspberry_pi_environment():
         raise RuntimeError(
@@ -30,17 +33,18 @@ def require_raspberry_pi_runtime():
             "GPIO access is unavailable in WSL, VM, or unsupported environments."
         )
 
+
 # ============================================================================== 
 # 1. HARDWARE HARD-CODED PIN ASSIGNMENTS (MATCHING INTEGRATION SPEC)
 # ==============================================================================
-START_PIN = 27   # Physical Pin 13
-ESTOP_PIN = 22   # Physical Pin 15
+START_PIN = 27   # Physical pin 13
+ESTOP_PIN = 22   # Physical pin 15
 
-# A/B/C/D button mapping confirmed by hardware wiring
-A_PIN = 18       # Physical Pin 12
-B_PIN = 23       # Physical Pin 16
-C_PIN = 24       # Physical Pin 18
-D_PIN = 25       # Physical Pin 22
+# Confirmed hardware layout: A/B/C/D are on GPIO 18/23/24/25.
+A_PIN = 18       # Physical pin 12
+B_PIN = 23       # Physical pin 16
+C_PIN = 24       # Physical pin 18
+D_PIN = 25       # Physical pin 22
 
 NAV_BUTTONS = [
     ("A", A_PIN),
@@ -59,6 +63,7 @@ GRADE_BY_BUTTON = {
     D_PIN: 12,
 }
 
+
 # ============================================================================== 
 # 2. RUNTIME ASSET DIRECTORY CONVENTIONS
 # ==============================================================================
@@ -69,10 +74,12 @@ AUDIO_SUMMARY = "/home/pi/numina/audio/summary.mp3"
 VIDEO_LESSON = "/home/pi/numina/video/lesson_viz.mp4"
 CAPTURE_PATH = "/home/pi/numina/capture/problem_input.jpg"
 
+
 # ============================================================================== 
 # 3. LOW-LEVEL SYSTEM AND INTERFACE INITIALIZATION
 # ==============================================================================
 device_matrix = None
+
 
 def setup_hardware():
     global device_matrix
@@ -95,21 +102,22 @@ def setup_hardware():
     try:
         pygame.mixer.init()
         print("[AUDIO] Pygame audio mixer successfully registered.")
-    except Exception as e:
-        print(f"[WARN] Audio card initialization deferred: {e}")
+    except Exception as exc:
+        print(f"[WARN] Audio card initialization deferred: {exc}")
 
     print("[SPI] Attempting to hook into high-speed MAX7219 Dot-Matrix display hardware bus...")
     try:
         serial_spi = spi(port=0, device=0, gpio=noop())
         device_matrix = max7219(serial_spi, cascaded=1)
-        device_matrix.contrast(30)  # Moderate current limit brightness threshold
+        device_matrix.contrast(30)
         device_matrix.clear()
         time.sleep(0.1)
         set_status("idle")
         print("[MATRIX] SPI MAX7219 communication layer fully unblocked and verified.")
-    except Exception as e:
+    except Exception as exc:
         device_matrix = None
-        print(f"[WARN] SPI MAX7219 Array initialization skipped or failed: {e}")
+        print(f"[WARN] SPI MAX7219 Array initialization skipped or failed: {exc}")
+
 
 def set_status(state):
     """Updates the MAX7219 matrix to indicate the robot's live status."""
@@ -129,9 +137,11 @@ def set_status(state):
         draw_matrix_glyph("clear")
     print(f"[MATRIX] Graphic context for state='{state}' written onto screen panel.")
 
+
 def draw_matrix_glyph(glyph_type):
-    """Renders precise static visual glyph blocks straight onto the 8x8 matrix panel."""
+    """Renders precise static visual glyph blocks onto the 8x8 matrix panel."""
     global device_matrix
+
     if device_matrix is None:
         return
 
@@ -147,8 +157,10 @@ def draw_matrix_glyph(glyph_type):
                     draw.point((x, 3), fill="white")
                     draw.point((x, 4), fill="white")
         elif glyph_type == "error":
-            for x, y in [(0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7),
-                         (0, 7), (1, 6), (2, 5), (3, 4), (4, 3), (5, 2), (6, 1), (7, 0)]:
+            for x, y in [
+                (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7),
+                (0, 7), (1, 6), (2, 5), (3, 4), (4, 3), (5, 2), (6, 1), (7, 0),
+            ]:
                 draw.point((x, y), fill="white")
         elif glyph_type == "smile":
             draw.point((1, 2), fill="white")
@@ -167,15 +179,18 @@ def draw_matrix_glyph(glyph_type):
         else:
             device_matrix.clear()
 
+
 def emergency_stop_callback(channel):
-    """High-priority hardware interrupt callback loop ensuring absolute mechanical safety."""
+    """High-priority hardware interrupt callback loop ensuring absolute safety."""
     print("\n[🚨 CRITICAL INTERRUPT] EMERGENCY SHUTDOWN TERMINATION EVENT ACTIVATED!")
-    
+
     try:
         if device_matrix:
             with canvas(device_matrix) as draw:
-                for x, y in [(0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7),
-                             (0, 7), (1, 6), (2, 5), (3, 4), (4, 3), (5, 2), (6, 1), (7, 0)]:
+                for x, y in [
+                    (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7),
+                    (0, 7), (1, 6), (2, 5), (3, 4), (4, 3), (5, 2), (6, 1), (7, 0),
+                ]:
                     draw.point((x, y), fill="white")
             print("[E-STOP] Matrix display forced to ERROR mode.")
     except Exception:
@@ -192,6 +207,10 @@ def emergency_stop_callback(channel):
     print("[E-STOP] Hard exiting thread loop cleanly.")
     os._exit(0)
 
+
+# ============================================================================== 
+# 4. ROBUST DEBOUNCED PIN SAMPLING LOGIC (WITH RACE-CONDITION IMMUNITY)
+# ==============================================================================
 def wait_for_press(target_pins, debounce_ms=20):
     """Wait for a fresh active-low press, ignoring any button already held at call time."""
     print(f"[POLLING] Monitoring input keys on pins: {target_pins}...")
@@ -213,32 +232,38 @@ def wait_for_press(target_pins, debounce_ms=20):
                         print(f"[POLLING] Pin BCM {pin} released. Returning token.")
                         return pin
             time.sleep(0.02)
-            
     except Exception:
         print("[POLLING] Handlers caught exception context. Exiting execution thread safely.")
         sys.exit(0)
 
+
 def select_grade():
     """Grade selection using explicit A/B/C/D key press to advance directly."""
-    print(" -> Grade selection selection active: [A]=Grade 9 | [B]=Grade 10 | [C]=Grade 11 | [D]=Grade 12")
+    print(" -> Grade selection active: [A]=Grade 9 | [B]=Grade 10 | [C]=Grade 11 | [D]=Grade 12")
     key = wait_for_press([A_PIN, B_PIN, C_PIN, D_PIN])
     chosen_grade = GRADE_BY_BUTTON[key]
-    print(f"[OK] Grade selection locked and auto-confirmed: Grade {chosen_grade}")
+    print(f"[OK] Grade selection locked: Grade {chosen_grade}")
     return chosen_grade
 
+
 def select_option(options, label):
-    """Multi-choice topic selector using structural key parameters to advance directly."""
+    """Multi-choice selector using A/B/C/D buttons."""
     if not options:
         return None
+
     display_options = options[:4]
     print(f" -> {label}: [A]={display_options[0]} | [B]={display_options[1]} | [C]={display_options[2]} | [D]={display_options[3]}")
-    
+
     key = wait_for_press([A_PIN, B_PIN, C_PIN, D_PIN])
     idx = NAV_KEY_TO_INDEX[key] % len(display_options)
     chosen_option = display_options[idx]
-    print(f"[OK] {label} locked and auto-confirmed: {chosen_option}")
+    print(f"[OK] {label} locked: {chosen_option}")
     return chosen_option
 
+
+# ============================================================================== 
+# 5. MULTIMEDIA DEVICE DRIVER OVERLAYS
+# ==============================================================================
 def play_audio(file_path):
     print(f"[MEDIA] Checking voice resource location: {file_path}")
 
@@ -256,9 +281,10 @@ def play_audio(file_path):
 
         print("[AUDIO] Track block completed execution playback.")
         return True
-    except Exception as e:
-        print(f"[AUDIO ERROR] Playback error seen: {e}")
+    except Exception as exc:
+        print(f"[AUDIO ERROR] Playback error seen: {exc}")
         return False
+
 
 def play_video(file_path):
     print(f"[MEDIA] Checking visual resource location: {file_path}")
@@ -272,14 +298,19 @@ def play_video(file_path):
     cmd = f"cvlc --no-osd --fullscreen --play-and-exit {file_path} > /dev/null 2>&1"
     subprocess.Popen(cmd, shell=True)
 
+
 def execute_camera_capture(output_path):
     print("[CAMERA MODULE 3] Running high-speed headless frame capture sequence...")
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-    cmd = f"rpicam-still -t 1 --camera 0 --nopreview -o {output_path}"
+    cmd = f"rpicam-still -t 100 --nopreview -o {output_path}"
     res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     return res.returncode == 0 and os.path.exists(output_path)
 
+
+# ============================================================================== 
+# 6. INTEGRATED FLOW MANAGER
+# ==============================================================================
 def run_numina_engine():
     setup_hardware()
     print("======================================================")
@@ -307,14 +338,14 @@ def run_numina_engine():
         mode_branch = wait_for_press([A_PIN, B_PIN])
 
         if mode_branch == A_PIN:
-            print(f"[TRACK A] Initialising structured curriculum module for Grade {selected_grade}: {selected_concept}")
+            print(f"[TRACK A] Initialising curriculum module for Grade {selected_grade}: {selected_concept}")
             print("[MEDIA F8.0] Synchronising video displays with headset audio lectures...")
             play_video(VIDEO_LESSON)
             play_audio(AUDIO_GUIDE)
 
             print("\n[QUIZ ENGINE F9.0] Starting assessment validation sequence...")
             score = 0
-            
+
             print("\n[Q1] Evaluate definition bounds: Is this concept system dimensionally homogeneous?")
             print(" -> Options: [A] Always True | [B] Conditional | [C] Never True | [D] Insufficient Information")
             ans1 = wait_for_press([A_PIN, B_PIN, C_PIN, D_PIN])
@@ -336,9 +367,9 @@ def run_numina_engine():
             total_questions = 2
             percentage = (score / total_questions) * 100
             print(f"\n======================================================")
-            print(f" [GRADING SUMMARY] Student evaluation completed.")
+            print(" [GRADING SUMMARY] Student evaluation completed.")
             print(f" -> Final Score: {score}/{total_questions} ({percentage:.1f}%)")
-            print(f"======================================================")
+            print("======================================================")
 
             if percentage >= 50.0:
                 print("[CHECK F9.1] Student PASSED evaluation threshold. Showing smile expression matrix.")
@@ -350,7 +381,6 @@ def run_numina_engine():
 
             print("[FACT OUTPUT F10.0] Outputting real-world engineering core applications context...")
             play_audio(AUDIO_FACT)
-            
         else:
             print("[TRACK B] Deploying analytical scanner processor pipeline F11.0...")
             print(" -> Choose Input Source: [C] Capture Camera Module | [D] Sample Storage")
@@ -404,7 +434,8 @@ def run_numina_engine():
 
     print("[TERMINATE COMPLETE] System architecture parked safely.")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     try:
         run_numina_engine()
     except KeyboardInterrupt:
