@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-
 import os
 import subprocess
 import sys
@@ -7,7 +6,7 @@ import time
 
 import pygame
 
-# Suppress luma initialization errors when desktop environment links are unavailable.
+# Suppress luma initialization errors when desktop environment links are unavailable
 os.environ["LUMA_NO_DISPLAY"] = "1"
 
 import RPi.GPIO as GPIO
@@ -37,14 +36,14 @@ def require_raspberry_pi_runtime():
 # ============================================================================== 
 # 1. HARDWARE HARD-CODED PIN ASSIGNMENTS (MATCHING INTEGRATION SPEC)
 # ==============================================================================
-START_PIN = 27   # Physical pin 13
-ESTOP_PIN = 22   # Physical pin 15
+START_PIN = 27  # Physical Pin 13
+ESTOP_PIN = 22  # Physical Pin 15
 
-# Confirmed hardware layout: A/B/C/D are on GPIO 18/23/24/25.
-A_PIN = 18       # Physical pin 12
-B_PIN = 23       # Physical pin 16
-C_PIN = 24       # Physical pin 18
-D_PIN = 25       # Physical pin 22
+# A/B/C/D button mapping confirmed by hardware wiring
+A_PIN = 18  # Physical Pin 12
+B_PIN = 23  # Physical Pin 16
+C_PIN = 24  # Physical Pin 18
+D_PIN = 25  # Physical Pin 22
 
 NAV_BUTTONS = [
     ("A", A_PIN),
@@ -67,11 +66,11 @@ GRADE_BY_BUTTON = {
 # ============================================================================== 
 # 2. RUNTIME ASSET DIRECTORY CONVENTIONS
 # ==============================================================================
-AUDIO_INTRO = "/home/pi/numina/audio/intro.mp3"
+AUDIO_INTRO = "/home/pi/numina/audio/lesson.mp3"  # Updated to lesson.mp3 for onboarding start
 AUDIO_GUIDE = "/home/pi/numina/audio/guide_step.mp3"
 AUDIO_FACT = "/home/pi/numina/audio/fun_fact.mp3"
 AUDIO_SUMMARY = "/home/pi/numina/audio/summary.mp3"
-VIDEO_LESSON = "/home/pi/numina/video/lesson_viz.mp4"
+VIDEO_LESSON = "/home/pi/numina/video/lesson.mp4"  # Explicit lesson video link asset
 CAPTURE_PATH = "/home/pi/numina/capture/problem_input.jpg"
 
 
@@ -102,8 +101,8 @@ def setup_hardware():
     try:
         pygame.mixer.init()
         print("[AUDIO] Pygame audio mixer successfully registered.")
-    except Exception as exc:
-        print(f"[WARN] Audio card initialization deferred: {exc}")
+    except Exception as e:
+        print(f"[WARN] Audio card initialization deferred: {e}")
 
     print("[SPI] Attempting to hook into high-speed MAX7219 Dot-Matrix display hardware bus...")
     try:
@@ -114,9 +113,9 @@ def setup_hardware():
         time.sleep(0.1)
         set_status("idle")
         print("[MATRIX] SPI MAX7219 communication layer fully unblocked and verified.")
-    except Exception as exc:
+    except Exception as e:
         device_matrix = None
-        print(f"[WARN] SPI MAX7219 Array initialization skipped or failed: {exc}")
+        print(f"[WARN] SPI MAX7219 Array initialization skipped or failed: {e}")
 
 
 def set_status(state):
@@ -139,9 +138,8 @@ def set_status(state):
 
 
 def draw_matrix_glyph(glyph_type):
-    """Renders precise static visual glyph blocks onto the 8x8 matrix panel."""
+    """Renders precise static visual glyph blocks straight onto the 8x8 matrix panel."""
     global device_matrix
-
     if device_matrix is None:
         return
 
@@ -181,7 +179,7 @@ def draw_matrix_glyph(glyph_type):
 
 
 def emergency_stop_callback(channel):
-    """High-priority hardware interrupt callback loop ensuring absolute safety."""
+    """High-priority hardware interrupt callback loop ensuring absolute mechanical safety."""
     print("\n[🚨 CRITICAL INTERRUPT] EMERGENCY SHUTDOWN TERMINATION EVENT ACTIVATED!")
 
     try:
@@ -232,6 +230,7 @@ def wait_for_press(target_pins, debounce_ms=20):
                         print(f"[POLLING] Pin BCM {pin} released. Returning token.")
                         return pin
             time.sleep(0.02)
+
     except Exception:
         print("[POLLING] Handlers caught exception context. Exiting execution thread safely.")
         sys.exit(0)
@@ -239,15 +238,15 @@ def wait_for_press(target_pins, debounce_ms=20):
 
 def select_grade():
     """Grade selection using explicit A/B/C/D key press to advance directly."""
-    print(" -> Grade selection active: [A]=Grade 9 | [B]=Grade 10 | [C]=Grade 11 | [D]=Grade 12")
+    print(" -> Grade selection selection active: [A]=Grade 9 | [B]=Grade 10 | [C]=Grade 11 | [D]=Grade 12")
     key = wait_for_press([A_PIN, B_PIN, C_PIN, D_PIN])
     chosen_grade = GRADE_BY_BUTTON[key]
-    print(f"[OK] Grade selection locked: Grade {chosen_grade}")
+    print(f"[OK] Grade selection locked and auto-confirmed: Grade {chosen_grade}")
     return chosen_grade
 
 
 def select_option(options, label):
-    """Multi-choice selector using A/B/C/D buttons."""
+    """Multi-choice topic selector using structural key parameters to advance directly."""
     if not options:
         return None
 
@@ -257,7 +256,7 @@ def select_option(options, label):
     key = wait_for_press([A_PIN, B_PIN, C_PIN, D_PIN])
     idx = NAV_KEY_TO_INDEX[key] % len(display_options)
     chosen_option = display_options[idx]
-    print(f"[OK] {label} locked: {chosen_option}")
+    print(f"[OK] {label} locked and auto-confirmed: {chosen_option}")
     return chosen_option
 
 
@@ -266,7 +265,6 @@ def select_option(options, label):
 # ==============================================================================
 def play_audio(file_path):
     print(f"[MEDIA] Checking voice resource location: {file_path}")
-
     if not os.path.exists(file_path):
         print(f"[AUDIO] Missing asset: {os.path.basename(file_path)}. Skipping playback cleanly.")
         return False
@@ -275,20 +273,17 @@ def play_audio(file_path):
         print(f"[AUDIO] Streaming data blocks through sound card channel: {os.path.basename(file_path)}")
         pygame.mixer.music.load(file_path)
         pygame.mixer.music.play()
-
         while pygame.mixer.music.get_busy():
             time.sleep(0.1)
-
         print("[AUDIO] Track block completed execution playback.")
         return True
-    except Exception as exc:
-        print(f"[AUDIO ERROR] Playback error seen: {exc}")
+    except Exception as e:
+        print(f"[AUDIO ERROR] Playback error seen: {e}")
         return False
 
 
 def play_video(file_path):
     print(f"[MEDIA] Checking visual resource location: {file_path}")
-
     if not os.path.exists(file_path):
         print("[VIDEO EMULATOR] Mock video rendering display on monitor console...")
         time.sleep(3.0)
@@ -303,18 +298,19 @@ def execute_camera_capture(output_path):
     print("[CAMERA MODULE 3] Running high-speed headless frame capture sequence...")
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
+    # Exposure stabilized timing window parameter to eliminate auto-exposure sensor lockups
     cmd = f"rpicam-still -t 100 --nopreview -o {output_path}"
     res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     return res.returncode == 0 and os.path.exists(output_path)
 
 
 # ============================================================================== 
-# 6. INTEGRATED FLOW MANAGER
+# 6. INTEGRATED FLOW MANAGER (FIGURE 14 ARCHITECTURE ENGINE)
 # ==============================================================================
 def run_numina_engine():
     setup_hardware()
     print("======================================================")
-    print(" NUMINA BOT OPERATIONAL CORE: LIFECYCLE INTERACTION   ")
+    print(" NUMINA BOT OPERATIONAL CORE: LIFECYCLE INTERACTION ")
     print("======================================================")
 
     while True:
@@ -322,23 +318,30 @@ def run_numina_engine():
         set_status("idle")
         wait_for_press([START_PIN])
 
+        # F3.0 Onboarding On App Start -> Runs lesson.mp3
         set_status("processing")
         draw_matrix_glyph("smile")
-        print("[ONBOARDING F3.0] Executing digital audio intro audio framework...")
+        print("[ONBOARDING F3.0] Executing system start intro audio track...")
         play_audio(AUDIO_INTRO)
 
+        # F4.0 Select Grade
         print("[CONFIG F4.0] Launching grade curriculum selection module...")
         selected_grade = select_grade()
 
+        # F5.0 Select Topic
         print("[CONFIG F5.0] Launching domain topic selection panel...")
         concept_array = ["Linear Algebra", "Geometry Proofs", "Physics Dynamics", "Chemistry Moles"]
         selected_concept = select_option(concept_array, "Current Domain Selection")
 
+        # F6.0 Path Selection
         print("[ROUTING F6.0] Select Running Path: [A] Run Lesson Package | [B] Problem Matrix Solver")
         mode_branch = wait_for_press([A_PIN, B_PIN])
 
         if mode_branch == A_PIN:
-            print(f"[TRACK A] Initialising curriculum module for Grade {selected_grade}: {selected_concept}")
+            # ------------------------------------------------------------------
+            # TRACK A: EXPLICIT LECTURE & INTERACTIVE GRADING QUIZ ENGINE
+            # ------------------------------------------------------------------
+            print(f"[TRACK A] Initialising structured curriculum module for Grade {selected_grade}: {selected_concept}")
             print("[MEDIA F8.0] Synchronising video displays with headset audio lectures...")
             play_video(VIDEO_LESSON)
             play_audio(AUDIO_GUIDE)
@@ -346,6 +349,7 @@ def run_numina_engine():
             print("\n[QUIZ ENGINE F9.0] Starting assessment validation sequence...")
             score = 0
 
+            # Question 1
             print("\n[Q1] Evaluate definition bounds: Is this concept system dimensionally homogeneous?")
             print(" -> Options: [A] Always True | [B] Conditional | [C] Never True | [D] Insufficient Information")
             ans1 = wait_for_press([A_PIN, B_PIN, C_PIN, D_PIN])
@@ -355,6 +359,7 @@ def run_numina_engine():
             else:
                 print(" -> [RESULT] Question 1 Incorrect. (Correct answer was A)")
 
+            # Question 2
             print("\n[Q2] Identify optimal resolution pathway variables for calculations:")
             print(" -> Options: [A] Direct substitution | [B] Integration by parts | [C] Matrix inversion | [D] Neglect entirely")
             ans2 = wait_for_press([A_PIN, B_PIN, C_PIN, D_PIN])
@@ -377,11 +382,15 @@ def run_numina_engine():
             else:
                 print("[CHECK F9.2] Student FAILED evaluation threshold. Directing concept revision instructions.")
                 draw_matrix_glyph("error")
-                play_audio(AUDIO_GUIDE)
 
+            play_audio(AUDIO_GUIDE)
             print("[FACT OUTPUT F10.0] Outputting real-world engineering core applications context...")
             play_audio(AUDIO_FACT)
+
         else:
+            # ------------------------------------------------------------------
+            # TRACK B: MANUAL PROBLEM SCANNER SOLVER ENVIRONMENT
+            # ------------------------------------------------------------------
             print("[TRACK B] Deploying analytical scanner processor pipeline F11.0...")
             print(" -> Choose Input Source: [C] Capture Camera Module | [D] Sample Storage")
             capture_mode = wait_for_press([C_PIN, D_PIN])
@@ -395,21 +404,19 @@ def run_numina_engine():
                     print("[WARN] Camera frame capture pipeline timed out. Utilizing storage fallback indices.")
             else:
                 print("[DATABASE F11.3] Parsing targeted sample example question blocks...")
+                print("[ANALYSIS F12.0] Problem processing resolved: '3x + 9 = 24'")
+                mock_steps = [
+                    "Subtract 9 from both sides of the equation -> 3x = 15",
+                    "Divide both sides by coefficients -> x = 5",
+                ]
+                print("[GUIDE F13.0] Reviewing calculated mathematical derivations step-by-step...")
+                for step_data in mock_steps:
+                    print(f" -> Core Instruction: {step_data}")
 
-            print("[ANALYSIS F12.0] Problem processing resolved: '3x + 9 = 24'")
-            mock_steps = [
-                "Subtract 9 from both sides of the equation -> 3x = 15",
-                "Divide both sides by coefficients -> x = 5",
-            ]
-
-            print("[GUIDE F13.0] Reviewing calculated mathematical derivations step-by-step...")
-            for step_data in mock_steps:
-                print(f" -> Core Instruction: {step_data}")
-
-            draw_matrix_glyph("arrow_right")
-            play_audio(AUDIO_GUIDE)
-            print(" -> [Control Interaction] Tap D button to progress workflow...")
-            wait_for_press([D_PIN])
+                draw_matrix_glyph("arrow_right")
+                play_audio(AUDIO_GUIDE)
+                print(" -> [Control Interaction] Tap D button to progress workflow...")
+                wait_for_press([D_PIN])
 
             print("[CHECK F14.0] Verifying understanding matrix parameters. [A] Understood | [B] Confused")
             understanding = wait_for_press([A_PIN, B_PIN])
@@ -417,22 +424,22 @@ def run_numina_engine():
                 print("[CHECK F14.1] Learner confirmed understanding. Continue with summary.")
             else:
                 print("[CHECK F14.2] Learner is still confused. Re-loop through guided explanation.")
-                play_audio(AUDIO_GUIDE)
+            play_audio(AUDIO_GUIDE)
 
-        print("[SUMMARY F15.0] Broadcasting logged classroom progress analytics metrics...")
-        play_audio(AUDIO_SUMMARY)
-        print("[PROMPT F16.0] 'Do you want to address alternative coursework sections?'")
-        print(" -> Action Vector: [A] YES, return to loop and clear | [B] NO, shut down robot engine")
-        loop_decision = wait_for_press([A_PIN, B_PIN])
+            # Closeout metrics sequence
+            print("[SUMMARY F15.0] Broadcasting logged classroom progress analytics metrics...")
+            play_audio(AUDIO_SUMMARY)
+            print("[PROMPT F16.0] 'Do you want to address alternative coursework sections?'")
+            print(" -> Action Vector: [A] YES, return to loop and clear | [B] NO, shut down robot engine")
+            loop_decision = wait_for_press([A_PIN, B_PIN])
+            if loop_decision == B_PIN:
+                print("[DEEP SLEEP F17.0] Safely parsing shutdown commands. Powering down safe core registers.")
+                break
 
-        if loop_decision == B_PIN:
-            print("[DEEP SLEEP F17.0] Safely parsing shutdown commands. Powering down safe core registers.")
-            break
+            print("[LOOP F17.1] Re-initializing configuration variables. Ready for the next learner session.")
+            draw_matrix_glyph("clear")
 
-        print("[LOOP F17.1] Re-initializing configuration variables. Ready for the next learner session.")
-        draw_matrix_glyph("clear")
-
-    print("[TERMINATE COMPLETE] System architecture parked safely.")
+        print("[TERMINATE COMPLETE] System architecture parked safely.")
 
 
 if __name__ == "__main__":
