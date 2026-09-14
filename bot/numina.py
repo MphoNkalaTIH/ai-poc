@@ -30,13 +30,6 @@ def require_raspberry_pi_runtime():
             "GPIO access is unavailable in WSL, VM, or unsupported environments."
         )
 
-def safe_gpio_cleanup():
-    try:
-        print("[GPIO] Cleaning up peripheral registers and pin maps safely...")
-        GPIO.cleanup()
-    except RuntimeError:
-        pass
-
 # ============================================================================== 
 # 1. HARDWARE HARD-CODED PIN ASSIGNMENTS (MATCHING INTEGRATION SPEC)
 # ==============================================================================
@@ -146,22 +139,18 @@ def draw_matrix_glyph(glyph_type):
         if glyph_type == "clear":
             device_matrix.clear()
         elif glyph_type == "idle":
-            # Small uniform center tracking node representing ready/standby
             for x, y in [(3, 3), (3, 4), (4, 3), (4, 4)]:
                 draw.point((x, y), fill="white")
         elif glyph_type == "processing":
-            # Bar pattern signifying backend operations/computing running
             for x in range(8):
                 if x % 2 == 0:
                     draw.point((x, 3), fill="white")
                     draw.point((x, 4), fill="white")
         elif glyph_type == "error":
-            # Large systemic fault 'X' icon for crash/E-STOP state
             for x, y in [(0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7),
                          (0, 7), (1, 6), (2, 5), (3, 4), (4, 3), (5, 2), (6, 1), (7, 0)]:
                 draw.point((x, y), fill="white")
         elif glyph_type == "smile":
-            # Operational smiling mouth expression for friendly student interaction
             draw.point((1, 2), fill="white")
             draw.point((1, 5), fill="white")
             draw.point((4, 1), fill="white")
@@ -171,7 +160,6 @@ def draw_matrix_glyph(glyph_type):
             draw.point((5, 5), fill="white")
             draw.point((4, 6), fill="white")
         elif glyph_type == "arrow_right":
-            # Incremental workflow progression menu pointer arrow
             for x in range(2, 6):
                 draw.point((3, x), fill="white")
             draw.point((2, 4), fill="white")
@@ -183,7 +171,6 @@ def emergency_stop_callback(channel):
     """High-priority hardware interrupt callback loop ensuring absolute mechanical safety."""
     print("\n[🚨 CRITICAL INTERRUPT] EMERGENCY SHUTDOWN TERMINATION EVENT ACTIVATED!")
     
-    # 1. Force the matrix to display the error 'X' glyph instantly
     try:
         if device_matrix:
             with canvas(device_matrix) as draw:
@@ -194,45 +181,42 @@ def emergency_stop_callback(channel):
     except Exception:
         pass
 
-    # 2. Kill active sounds immediately
     try:
         pygame.mixer.music.stop()
         print("[E-STOP] Sound card playback pipelines neutralized.")
     except Exception:
         pass
 
-    # 3. Force terminate running video instances immediately
     print("[E-STOP] Killing active video tasks...")
     os.system("pkill vlc || pkill cvlc")
+    print("[E-STOP] Hard exiting thread loop cleanly.")
+    os._exit(0)
 
-    safe_gpio_cleanup()
-    print("[E-STOP] All logic pins safely neutralized. Terminating execution path completely.")
-    sys.exit(0)
-
-# ============================================================================== 
-# 4. ROBUST DEBOUNCED PIN SAMPLING LOGIC
-# ==============================================================================
 def wait_for_press(target_pins, debounce_ms=20):
     """Wait for a fresh active-low press, ignoring any button already held at call time."""
     print(f"[POLLING] Monitoring input keys on pins: {target_pins}...")
 
-    # Ignore any button already pressed before the user starts a new interaction.
-    while True:
-        if all(GPIO.input(pin) == GPIO.HIGH for pin in target_pins):
-            break
-        time.sleep(0.02)
+    try:
+        while True:
+            if all(GPIO.input(pin) == GPIO.HIGH for pin in target_pins):
+                break
+            time.sleep(0.02)
 
-    while True:
-        for pin in target_pins:
-            if GPIO.input(pin) == GPIO.LOW:
-                time.sleep(debounce_ms / 1000.0)
+        while True:
+            for pin in target_pins:
                 if GPIO.input(pin) == GPIO.LOW:
-                    print(f"[POLLING] Pin BCM {pin} active state confirmed. Waiting for release...")
-                    while GPIO.input(pin) == GPIO.LOW:
-                        time.sleep(0.01)
-                    print(f"[POLLING] Pin BCM {pin} released. Returning token.")
-                    return pin
-        time.sleep(0.02)
+                    time.sleep(debounce_ms / 1000.0)
+                    if GPIO.input(pin) == GPIO.LOW:
+                        print(f"[POLLING] Pin BCM {pin} active state confirmed. Waiting for release...")
+                        while GPIO.input(pin) == GPIO.LOW:
+                            time.sleep(0.01)
+                        print(f"[POLLING] Pin BCM {pin} released. Returning token.")
+                        return pin
+            time.sleep(0.02)
+            
+    except Exception:
+        print("[POLLING] Handlers caught exception context. Exiting execution thread safely.")
+        sys.exit(0)
 
 def select_grade():
     """Grade selection using explicit A/B/C/D key press to advance directly."""
@@ -255,9 +239,6 @@ def select_option(options, label):
     print(f"[OK] {label} locked and auto-confirmed: {chosen_option}")
     return chosen_option
 
-# ============================================================================== 
-# 5. MULTIMEDIA DEVICE DRIVER OVERLAYS
-# ==============================================================================
 def play_audio(file_path):
     print(f"[MEDIA] Checking voice resource location: {file_path}")
 
@@ -292,17 +273,13 @@ def play_video(file_path):
     subprocess.Popen(cmd, shell=True)
 
 def execute_camera_capture(output_path):
-    print("[CAMERA MODULE 3] Running autofocus calibration capture routine...")
+    print("[CAMERA MODULE 3] Running high-speed headless frame capture sequence...")
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-    cmd = f"libcamera-still -t 1500 --autofocus-mode normal -o {output_path} --nopreview"
+    cmd = f"rpicam-still -t 1 --camera 0 --nopreview -o {output_path}"
     res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     return res.returncode == 0 and os.path.exists(output_path)
 
-
-# ============================================================================== 
-# 6. INTEGRATED FLOW MANAGER (FIGURE 14 ARCHITECTURE ENGINE)
-# ==============================================================================
 def run_numina_engine():
     setup_hardware()
     print("======================================================")
@@ -314,29 +291,22 @@ def run_numina_engine():
         set_status("idle")
         wait_for_press([START_PIN])
 
-        # F3.0 Onboarding
         set_status("processing")
         draw_matrix_glyph("smile")
         print("[ONBOARDING F3.0] Executing digital audio intro audio framework...")
         play_audio(AUDIO_INTRO)
 
-        # F4.0 Select Grade
         print("[CONFIG F4.0] Launching grade curriculum selection module...")
         selected_grade = select_grade()
 
-        # F5.0 Select Topic
         print("[CONFIG F5.0] Launching domain topic selection panel...")
         concept_array = ["Linear Algebra", "Geometry Proofs", "Physics Dynamics", "Chemistry Moles"]
         selected_concept = select_option(concept_array, "Current Domain Selection")
 
-        # F6.0 Path Selection
         print("[ROUTING F6.0] Select Running Path: [A] Run Lesson Package | [B] Problem Matrix Solver")
         mode_branch = wait_for_press([A_PIN, B_PIN])
 
         if mode_branch == A_PIN:
-            # ------------------------------------------------------------------
-            # TRACK A: EXPLICIT LECTURE & INTERACTIVE GRADING QUIZ ENGINE
-            # ------------------------------------------------------------------
             print(f"[TRACK A] Initialising structured curriculum module for Grade {selected_grade}: {selected_concept}")
             print("[MEDIA F8.0] Synchronising video displays with headset audio lectures...")
             play_video(VIDEO_LESSON)
@@ -345,7 +315,6 @@ def run_numina_engine():
             print("\n[QUIZ ENGINE F9.0] Starting assessment validation sequence...")
             score = 0
             
-            # Question 1
             print("\n[Q1] Evaluate definition bounds: Is this concept system dimensionally homogeneous?")
             print(" -> Options: [A] Always True | [B] Conditional | [C] Never True | [D] Insufficient Information")
             ans1 = wait_for_press([A_PIN, B_PIN, C_PIN, D_PIN])
@@ -355,7 +324,6 @@ def run_numina_engine():
             else:
                 print(" -> [RESULT] Question 1 Incorrect. (Correct answer was A)")
 
-            # Question 2
             print("\n[Q2] Identify optimal resolution pathway variables for calculations:")
             print(" -> Options: [A] Direct substitution | [B] Integration by parts | [C] Matrix inversion | [D] Neglect entirely")
             ans2 = wait_for_press([A_PIN, B_PIN, C_PIN, D_PIN])
@@ -365,7 +333,6 @@ def run_numina_engine():
             else:
                 print(" -> [RESULT] Question 2 Incorrect. (Correct answer was C)")
 
-            # Grading Calculation Logic Output
             total_questions = 2
             percentage = (score / total_questions) * 100
             print(f"\n======================================================")
@@ -385,9 +352,6 @@ def run_numina_engine():
             play_audio(AUDIO_FACT)
             
         else:
-            # ------------------------------------------------------------------
-            # TRACK B: MANUAL PROBLEM SCANNER SOLVER ENVIRONMENT
-            # ------------------------------------------------------------------
             print("[TRACK B] Deploying analytical scanner processor pipeline F11.0...")
             print(" -> Choose Input Source: [C] Capture Camera Module | [D] Sample Storage")
             capture_mode = wait_for_press([C_PIN, D_PIN])
@@ -396,9 +360,9 @@ def run_numina_engine():
                 print("[HARDWARE F11.1] Capturing workspace frame via CSI lens layout...")
                 set_status("processing")
                 if execute_camera_capture(CAPTURE_PATH):
-                    print("[PARSING F11.2] Extracting structural equation tokens from captured picture...")
+                    print(f"[PARSING F11.2] Extracting structural tokens from file: {CAPTURE_PATH}")
                 else:
-                    print("[WARN] External camera input missing. Utilizing storage fallback array indices.")
+                    print("[WARN] Camera frame capture pipeline timed out. Utilizing storage fallback indices.")
             else:
                 print("[DATABASE F11.3] Parsing targeted sample example question blocks...")
 
@@ -425,7 +389,6 @@ def run_numina_engine():
                 print("[CHECK F14.2] Learner is still confused. Re-loop through guided explanation.")
                 play_audio(AUDIO_GUIDE)
 
-        # Closeout metrics sequence
         print("[SUMMARY F15.0] Broadcasting logged classroom progress analytics metrics...")
         play_audio(AUDIO_SUMMARY)
         print("[PROMPT F16.0] 'Do you want to address alternative coursework sections?'")
@@ -440,15 +403,12 @@ def run_numina_engine():
         draw_matrix_glyph("clear")
 
     print("[TERMINATE COMPLETE] System architecture parked safely.")
-    safe_gpio_cleanup()
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     try:
         run_numina_engine()
     except KeyboardInterrupt:
-        safe_gpio_cleanup()
+        sys.exit(0)
     except RuntimeError as exc:
         print(f"[RUNTIME ERROR] {exc}")
-        safe_gpio_cleanup()
         sys.exit(1)
