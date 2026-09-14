@@ -250,11 +250,13 @@ def run_numina_engine():
     print(" NUMINA BOT OPERATIONAL CORE: REVISION INTERACTION   ")
     print("======================================================")
 
+    # Standby: show a visible idle glyph while waiting for the START button.
+    set_status("idle")
+
     while True:
         # F1.0 / F2.0: standby and startup ready state
-        set_status("idle")
-        draw_matrix_glyph("clear")
         print("\n[STANDBY F1.0] Awaiting user initialization signal via START switch...")
+        set_status("idle")
         wait_for_press([START_PIN])
 
         # F3.0: intro and onboarding

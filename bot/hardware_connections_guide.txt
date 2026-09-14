@@ -66,54 +66,36 @@ common shared Ground (GND) rail. Software will initialize internal pull-up profi
   * Button Terminal 2 -> Shared Ground Rail
 
 -------------------------------------------------------------------------------
-SECTION 3: SYSTEM STATUS INDICATOR LED TELEMETRY BLOCK [done]
+SECTION 3: AUDIO INTERFACE: PICO H ADC USB MICROPHONE BRIDGE & SAFE OUTPUT
 -------------------------------------------------------------------------------
-Every status indicator LED features a dedicated inline 220 Ohm current-limiting 
-resistor protecting the GPIO lines from excessive current draw.
+Since the Waveshare sound card lacks a hardware mic input port, analog voice capture
+is handled securely by programming the alternative Raspberry Pi Pico H to act as a 
+USB Audio Class ADC converter device, filtering audio directly into the Pi 5 USB.
 
-- LED MODULE 1: GREEN STATUS LED (IDLE / READY STATE)
-  * RPi 5 Physical Pin 31 (GPIO 6) -> Leg A of 220 Ohm Resistor
-  * Leg B of 220 Ohm Resistor -> Green LED Anode (Long Lead)
-  * Green LED Cathode (Short Lead) -> Main Ground Rail
+A. Preamp & Pico H ADC Audio Input Execution (Breadboard Rows 30-45, Cols F-J):
+   1. Connect Pico Pin 36 (3V3_OUT) -> Breadboard +3.3V Power Rail.
+   2. Connect Pico Pin 38 (GND) -> Breadboard Common GND Rail.
+   3. Route Logitech Mic White Wire (+) -> Leg A of 100nF Ceramic Capacitor.
+   4. Route Leg B of 100nF Ceramic Capacitor -> 2N2222 Transistor Base (Center Pin).
+   5. Route Logitech Mic Bare Wire (-) -> Breadboard Common GND Rail.
+   6. Wire a 100kΩ Resistor from the +3.3V Rail to the Transistor Base pin.
+   7. Wire a 10kΩ Resistor from the Transistor Base pin to the GND Rail.
+   8. Connect the 2N2222 Transistor Emitter (Right Pin) directly to the GND Rail.
+   9. Connect a 1kΩ Load Resistor from the +3.3V Rail to the Transistor Collector (Left Pin).
+   10. Run a jumper wire from the Transistor Collector (Left Pin) -> Pico H Pin 31 (ADC0 / GP26).
+   11. Use a standard Micro-USB cable to connect the Pico H directly to a RPi 5 USB port.
 
-- LED MODULE 2: YELLOW STATUS LED (PROCESSING STATE)
-  * RPi 5 Physical Pin 33 (GPIO 13) -> Leg A of 220 Ohm Resistor
-  * Leg B of 220 Ohm Resistor -> Yellow LED Anode (Long Lead)
-  * Yellow LED Cathode (Short Lead) -> Main Ground Rail
-
-- LED MODULE 3: RED STATUS LED (FAULT / EMERGENCY STOP STATE)
-  * RPi 5 Physical Pin 35 (GPIO 19) -> Leg A of 220 Ohm Resistor
-  * Leg B of 220 Ohm Resistor -> Red LED Anode (Long Lead)
-  * Red LED Cathode (Short Lead) -> Main Ground Rail
-
--------------------------------------------------------------------------------
-SECTION 4: LOGITECH MONO HEADSET ADAPTATION & AUDIO ROUTING
--------------------------------------------------------------------------------
-Since the 10uF smoothing capacitors are missing, the 100nF (0.1uF) ceramic 
-capacitors are deployed on the audio output signal lines to act as vital DC-blocking 
-high-pass filters. This ensures audio clarity and prevents amplifier overheating.
-
-A. Microphone Input Execution (Pink Port Splicing):
-   1. Identify the two raw wires from the stripped Logitech mono headset mic capsule.
-   2. Solder the White Wire (Mic Signal +) concurrently to the Tip (Left) and 
-      Ring (Right) solder terminals of the panel-mount 3.5mm TRS female socket.
-   3. Solder the Bare Wire (Mic Ground -) to the Sleeve (Ground) terminal of the socket.
-   4. Connect this jack directly to the Pink Microphone Port on the Waveshare USB Sound Card.
-
-B. Sound Card to PAM8403 Amplifier Inputs:
-   1. Waveshare Sound Card Green Port (Headphone Out) Left Channel Pin -> 
-      Leg A of 100nF Ceramic Capacitor.
-   2. Leg B of that first 100nF Ceramic Capacitor -> PAM8403 "L" (Left Input) pin.
-   3. Waveshare Sound Card Green Port (Headphone Out) Right Channel Pin -> 
-      Leg A of a second 100nF Ceramic Capacitor.
-   4. Leg B of that second 100nF Ceramic Capacitor -> PAM8403 "R" (Right Input) pin.
-   5. Waveshare Sound Card Green Port Ground Pin -> Direct wire to PAM8403 "G" 
-      (Input Audio Ground) terminal pin.
+B. Waveshare Sound Card Outputs to PAM8403 Amp Single-Ended Safe Audio Bridge:
+   1. Connect Sound Card VOLP (Left +) pin -> Leg A of a third 100nF Ceramic Capacitor.
+   2. Connect Leg B of that 100nF Ceramic Capacitor -> PAM8403 "L" (Left Input) pin.
+   3. Connect Sound Card VOLN (Left -) pin -> Direct wire to PAM8403 "G" (Audio Ground Input) pin.
+   4. DO NOT CONNECT VORP or VORN anywhere. Leave these pins completely open to eliminate loops.
 
 C. Amplifier Outputs to Logitech Mono Speaker:
    1. Connect the Logitech Speaker Positive (+) wire to PAM8403 "Lout+" terminal.
    2. Connect the Logitech Speaker Negative (-) wire to PAM8403 "Lout-" terminal.
-   3. Leave the Rout+ and Rout- terminals completely unpopulated (Mono layout configuration).
+   3. Leave the Rout+ and Rout- terminals completely unpopulated.
+
 
 -------------------------------------------------------------------------------
 SECTION 5: MAX7219 8x8 LED MATRIX DISPLAY BUS ARRAY
