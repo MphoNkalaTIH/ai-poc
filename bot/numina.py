@@ -54,9 +54,14 @@ NAV_BUTTONS = [
     ("D", RIGHT_PIN),
 ]
 NAV_KEY_TO_INDEX = {pin: idx for idx, (_, pin) in enumerate(NAV_BUTTONS)}
+NAV_LABEL_TO_PIN = {label: pin for label, pin in NAV_BUTTONS}
 GRADE_OPTIONS = [9, 10, 11, 12]
-OPTION_KEYS = [UP_PIN, DOWN_PIN, LEFT_PIN, RIGHT_PIN]
-GRADE_PIN_TO_VALUE = {pin: value for pin, value in zip(OPTION_KEYS, GRADE_OPTIONS)}
+GRADE_BY_BUTTON = {
+    UP_PIN: 9,
+    DOWN_PIN: 10,
+    LEFT_PIN: 11,
+    RIGHT_PIN: 12,
+}
 
 # ============================================================================== 
 # 2. RUNTIME ASSET DIRECTORY CONVENTIONS
@@ -221,20 +226,20 @@ def wait_for_press(target_pins, debounce_ms=20):
 
 def select_grade():
     """Grade selection using A/B/C/D navigation and START to confirm."""
-    current_idx = 0
+    current_grade = 9
     print(" -> Grade selection: A=9 | B=10 | C=11 | D=12")
-    print(f" -> Selected Grade: {GRADE_OPTIONS[current_idx]}")
+    print(f" -> Selected Grade: {current_grade}")
 
     while True:
         key = wait_for_press([UP_PIN, DOWN_PIN, LEFT_PIN, RIGHT_PIN, START_PIN])
 
         if key == START_PIN:
-            print(f"[OK] Grade selection confirmed: Grade {GRADE_OPTIONS[current_idx]}")
-            return GRADE_OPTIONS[current_idx]
+            print(f"[OK] Grade selection confirmed: Grade {current_grade}")
+            return current_grade
 
-        if key in GRADE_PIN_TO_VALUE:
-            current_idx = OPTION_KEYS.index(key)
-            print(f" -> Selected Grade: {GRADE_OPTIONS[current_idx]}")
+        if key in GRADE_BY_BUTTON:
+            current_grade = GRADE_BY_BUTTON[key]
+            print(f" -> Selected Grade: {current_grade}")
 
 
 def select_option(options, label):
