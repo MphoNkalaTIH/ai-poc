@@ -47,6 +47,17 @@ DOWN_PIN = 24    # Physical Pin 18
 LEFT_PIN = 25    # Physical Pin 22
 RIGHT_PIN = 26   # Physical Pin 37
 
+NAV_BUTTONS = [
+    ("A", UP_PIN),
+    ("B", DOWN_PIN),
+    ("C", LEFT_PIN),
+    ("D", RIGHT_PIN),
+]
+NAV_KEY_TO_INDEX = {pin: idx for idx, (_, pin) in enumerate(NAV_BUTTONS)}
+GRADE_OPTIONS = [9, 10, 11, 12]
+OPTION_KEYS = [UP_PIN, DOWN_PIN, LEFT_PIN, RIGHT_PIN]
+GRADE_PIN_TO_VALUE = {pin: value for pin, value in zip(OPTION_KEYS, GRADE_OPTIONS)}
+
 # ============================================================================== 
 # 2. RUNTIME ASSET DIRECTORY CONVENTIONS
 # ==============================================================================
@@ -209,38 +220,43 @@ def wait_for_press(target_pins, debounce_ms=20):
         time.sleep(0.02)
 
 def select_grade():
-    """Menu loop for selecting a grade using UP/DOWN and START as confirm."""
-    selected_grade = 9
-    print(f" -> Active Highlight Profile: Grade {selected_grade}")
+    """Grade selection using A/B/C/D navigation and START to confirm."""
+    current_idx = 0
+    print(" -> Grade selection: A=9 | B=10 | C=11 | D=12")
+    print(f" -> Selected Grade: {GRADE_OPTIONS[current_idx]}")
+
     while True:
-        key = wait_for_press([UP_PIN, DOWN_PIN, START_PIN])
-        if key == UP_PIN and selected_grade < 12:
-            selected_grade += 1
-            print(f" -> Active Highlight Profile: Grade {selected_grade}")
-        elif key == DOWN_PIN and selected_grade > 9:
-            selected_grade -= 1
-            print(f" -> Active Highlight Profile: Grade {selected_grade}")
-        elif key == START_PIN:
-            print(f"[OK] Grade selection confirmed: Grade {selected_grade}")
-            return selected_grade
+        key = wait_for_press([UP_PIN, DOWN_PIN, LEFT_PIN, RIGHT_PIN, START_PIN])
+
+        if key == START_PIN:
+            print(f"[OK] Grade selection confirmed: Grade {GRADE_OPTIONS[current_idx]}")
+            return GRADE_OPTIONS[current_idx]
+
+        if key in GRADE_PIN_TO_VALUE:
+            current_idx = OPTION_KEYS.index(key)
+            print(f" -> Selected Grade: {GRADE_OPTIONS[current_idx]}")
+
 
 def select_option(options, label):
-    """Generic left/right menu selector with START as confirm."""
+    """Multi-choice selector using A/B/C/D navigation and START as confirm."""
+    if not options:
+        return None
+
+    display_options = options[:4]
     current_idx = 0
-    print(f" -> {label}: {options[current_idx]}")
+    print(f" -> {label}: A={display_options[0]} | B={display_options[1]} | C={display_options[2]} | D={display_options[3]}")
+    print(f" -> {label}: {display_options[current_idx]}")
 
     while True:
-        key = wait_for_press([LEFT_PIN, RIGHT_PIN, START_PIN])
+        key = wait_for_press([UP_PIN, DOWN_PIN, LEFT_PIN, RIGHT_PIN, START_PIN])
 
-        if key == RIGHT_PIN:
-            current_idx = (current_idx + 1) % len(options)
-            print(f" -> {label}: {options[current_idx]}")
-        elif key == LEFT_PIN:
-            current_idx = (current_idx - 1) % len(options)
-            print(f" -> {label}: {options[current_idx]}")
-        elif key == START_PIN:
-            print(f"[OK] {label} confirmed: {options[current_idx]}")
-            return options[current_idx]
+        if key == START_PIN:
+            print(f"[OK] {label} confirmed: {display_options[current_idx]}")
+            return display_options[current_idx]
+
+        if key in NAV_KEY_TO_INDEX:
+            current_idx = NAV_KEY_TO_INDEX[key] % len(display_options)
+            print(f" -> {label}: {display_options[current_idx]}")
 
 
 # ============================================================================== 
@@ -250,9 +266,8 @@ def play_audio(file_path):
     print(f"[MEDIA] Checking voice resource location: {file_path}")
 
     if not os.path.exists(file_path):
-        print(f"[AUDIO EMULATOR] Mock play active for asset: {os.path.basename(file_path)}")
-        time.sleep(2.5)
-        return
+        print(f"[AUDIO] Missing asset: {os.path.basename(file_path)}. Skipping playback cleanly.")
+        return False
 
     try:
         print(f"[AUDIO] Streaming data blocks through sound card channel: {os.path.basename(file_path)}")
@@ -263,8 +278,10 @@ def play_audio(file_path):
             time.sleep(0.1)
 
         print("[AUDIO] Track block completed execution playback.")
+        return True
     except Exception as e:
         print(f"[AUDIO ERROR] Playback error seen: {e}")
+        return False
 
 
 def play_video(file_path):
@@ -316,7 +333,7 @@ def run_numina_engine():
         selected_concept = select_option(concept_array, "Current Domain Selection")
         print(f"[OK] Concept parameter configured successfully: {selected_concept}")
 
-        print("[ROUTING F6.0] Select Mode: [UP Key] Lesson Package | [DOWN Key] Problem Matrix Solver")
+        print("[ROUTING F6.0] Select Mode: [A] Lesson Package | [B] Problem Matrix Solver")
         mode_branch = wait_for_press([UP_PIN, DOWN_PIN])
 
         if mode_branch == UP_PIN:
@@ -326,7 +343,7 @@ def run_numina_engine():
             play_audio(AUDIO_GUIDE)
 
             print("[EVALUATION F9.0] Pushing verification checklist challenge block...")
-            print(" -> Interact to complete assessment quiz challenge: [UP for True | DOWN for False]")
+            print(" -> Interact to complete assessment quiz challenge: [A] True | [B] False")
             quiz_answer = wait_for_press([UP_PIN, DOWN_PIN])
 
             if quiz_answer == UP_PIN:
@@ -339,7 +356,7 @@ def run_numina_engine():
             play_audio(AUDIO_FACT)
         else:
             print("[TRACK B] Deploying analytical scanner processor pipeline F11.0...")
-            print(" -> Choose Input Source: [LEFT Key] Capture Camera Module | [RIGHT Key] Sample Storage")
+            print(" -> Choose Input Source: [C] Capture Camera Module | [D] Sample Storage")
             capture_mode = wait_for_press([LEFT_PIN, RIGHT_PIN])
 
             if capture_mode == LEFT_PIN:
@@ -364,10 +381,10 @@ def run_numina_engine():
 
             draw_matrix_glyph("arrow_right")
             play_audio(AUDIO_GUIDE)
-            print(" -> [Control Interaction] Tap RIGHT button to progress workflow...")
+            print(" -> [Control Interaction] Tap D button to progress workflow...")
             wait_for_press([RIGHT_PIN])
 
-            print("[CHECK F14.0] Verifying understanding matrix parameters. [UP for understood | DOWN for confused]")
+            print("[CHECK F14.0] Verifying understanding matrix parameters. [A] Understood | [B] Confused")
             understanding = wait_for_press([UP_PIN, DOWN_PIN])
             if understanding == UP_PIN:
                 print("[CHECK F14.1] Learner confirmed understanding. Continue with summary.")
@@ -378,7 +395,7 @@ def run_numina_engine():
         print("[SUMMARY F15.0] Broadcasting logged classroom progress analytics metrics...")
         play_audio(AUDIO_SUMMARY)
         print("[PROMPT F16.0] 'Do you want to address alternative coursework sections?'")
-        print(" -> Action Vector: [UP Button for YES, Return to Loop] | [DOWN Button for NO, Shut Down]")
+        print(" -> Action Vector: [A] YES, return to loop | [B] NO, shut down")
         loop_decision = wait_for_press([UP_PIN, DOWN_PIN])
 
         if loop_decision == DOWN_PIN:
