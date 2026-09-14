@@ -42,25 +42,27 @@ def safe_gpio_cleanup():
 # ==============================================================================
 START_PIN = 27   # Physical Pin 13
 ESTOP_PIN = 22   # Physical Pin 15
-UP_PIN = 23      # Physical Pin 16
-DOWN_PIN = 24    # Physical Pin 18
-LEFT_PIN = 25    # Physical Pin 22
-RIGHT_PIN = 26   # Physical Pin 37
+
+# A/B/C/D button mapping confirmed by hardware wiring
+A_PIN = 18       # Physical Pin 12
+B_PIN = 23       # Physical Pin 16
+C_PIN = 24       # Physical Pin 18
+D_PIN = 25       # Physical Pin 22
 
 NAV_BUTTONS = [
-    ("A", UP_PIN),
-    ("B", DOWN_PIN),
-    ("C", LEFT_PIN),
-    ("D", RIGHT_PIN),
+    ("A", A_PIN),
+    ("B", B_PIN),
+    ("C", C_PIN),
+    ("D", D_PIN),
 ]
 NAV_KEY_TO_INDEX = {pin: idx for idx, (_, pin) in enumerate(NAV_BUTTONS)}
 NAV_LABEL_TO_PIN = {label: pin for label, pin in NAV_BUTTONS}
 GRADE_OPTIONS = [9, 10, 11, 12]
 GRADE_BY_BUTTON = {
-    UP_PIN: 9,
-    DOWN_PIN: 10,
-    LEFT_PIN: 11,
-    RIGHT_PIN: 12,
+    A_PIN: 9,
+    B_PIN: 10,
+    C_PIN: 11,
+    D_PIN: 12,
 }
 
 # ============================================================================== 
@@ -88,7 +90,7 @@ def setup_hardware():
     GPIO.setwarnings(False)
 
     print("[GPIO] Initializing input buttons with internal software pull-up resistors...")
-    for pin in [START_PIN, ESTOP_PIN, UP_PIN, DOWN_PIN, LEFT_PIN, RIGHT_PIN]:
+    for pin in [START_PIN, ESTOP_PIN, A_PIN, B_PIN, C_PIN, D_PIN]:
         GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         print(f" -> Pin BCM {pin} initialized successfully as INPUT with PULL_UP.")
 
@@ -234,18 +236,23 @@ def wait_for_press(target_pins, debounce_ms=20):
 def select_grade():
     """Grade selection using A/B/C/D navigation and START to confirm."""
     current_grade = 9
+    selection_made = False
     print(" -> Grade selection: A=9 | B=10 | C=11 | D=12")
     print(f" -> Selected Grade: {current_grade}")
 
     while True:
-        key = wait_for_press([UP_PIN, DOWN_PIN, LEFT_PIN, RIGHT_PIN, START_PIN])
+        key = wait_for_press([A_PIN, B_PIN, C_PIN, D_PIN, START_PIN])
 
         if key == START_PIN:
+            if not selection_made:
+                print("[WAIT] Choose a grade first with A/B/C/D, then press START.")
+                continue
             print(f"[OK] Grade selection confirmed: Grade {current_grade}")
             return current_grade
 
         if key in GRADE_BY_BUTTON:
             current_grade = GRADE_BY_BUTTON[key]
+            selection_made = True
             print(f" -> Selected Grade: {current_grade}")
 
 
@@ -256,18 +263,23 @@ def select_option(options, label):
 
     display_options = options[:4]
     current_idx = 0
+    selection_made = False
     print(f" -> {label}: A={display_options[0]} | B={display_options[1]} | C={display_options[2]} | D={display_options[3]}")
     print(f" -> {label}: {display_options[current_idx]}")
 
     while True:
-        key = wait_for_press([UP_PIN, DOWN_PIN, LEFT_PIN, RIGHT_PIN, START_PIN])
+        key = wait_for_press([A_PIN, B_PIN, C_PIN, D_PIN, START_PIN])
 
         if key == START_PIN:
+            if not selection_made:
+                print(f"[WAIT] Choose an option first with A/B/C/D, then press START.")
+                continue
             print(f"[OK] {label} confirmed: {display_options[current_idx]}")
             return display_options[current_idx]
 
         if key in NAV_KEY_TO_INDEX:
             current_idx = NAV_KEY_TO_INDEX[key] % len(display_options)
+            selection_made = True
             print(f" -> {label}: {display_options[current_idx]}")
 
 
@@ -346,9 +358,9 @@ def run_numina_engine():
         print(f"[OK] Concept parameter configured successfully: {selected_concept}")
 
         print("[ROUTING F6.0] Select Mode: [A] Lesson Package | [B] Problem Matrix Solver")
-        mode_branch = wait_for_press([UP_PIN, DOWN_PIN])
+        mode_branch = wait_for_press([A_PIN, B_PIN])
 
-        if mode_branch == UP_PIN:
+        if mode_branch == A_PIN:
             print("[TRACK A] Deploying structured curriculum package F7.0...")
             print("[MEDIA F8.0] Syncing video stream visuals with microphone audio instructions...")
             play_video(VIDEO_LESSON)
@@ -356,9 +368,9 @@ def run_numina_engine():
 
             print("[EVALUATION F9.0] Pushing verification checklist challenge block...")
             print(" -> Interact to complete assessment quiz challenge: [A] True | [B] False")
-            quiz_answer = wait_for_press([UP_PIN, DOWN_PIN])
+            quiz_answer = wait_for_press([A_PIN, B_PIN])
 
-            if quiz_answer == UP_PIN:
+            if quiz_answer == A_PIN:
                 print("[CHECK F9.1] Student answered correctly. Moving to concept reinforcement.")
             else:
                 print("[CHECK F9.2] Student answered incorrectly. Revising the concept with guided audio.")
@@ -369,9 +381,9 @@ def run_numina_engine():
         else:
             print("[TRACK B] Deploying analytical scanner processor pipeline F11.0...")
             print(" -> Choose Input Source: [C] Capture Camera Module | [D] Sample Storage")
-            capture_mode = wait_for_press([LEFT_PIN, RIGHT_PIN])
+            capture_mode = wait_for_press([C_PIN, D_PIN])
 
-            if capture_mode == LEFT_PIN:
+            if capture_mode == C_PIN:
                 print("[HARDWARE F11.1] Capturing workspace frame via CSI lens layout...")
                 set_status("processing")
                 if execute_camera_capture(CAPTURE_PATH):
@@ -394,11 +406,11 @@ def run_numina_engine():
             draw_matrix_glyph("arrow_right")
             play_audio(AUDIO_GUIDE)
             print(" -> [Control Interaction] Tap D button to progress workflow...")
-            wait_for_press([RIGHT_PIN])
+            wait_for_press([D_PIN])
 
             print("[CHECK F14.0] Verifying understanding matrix parameters. [A] Understood | [B] Confused")
-            understanding = wait_for_press([UP_PIN, DOWN_PIN])
-            if understanding == UP_PIN:
+            understanding = wait_for_press([A_PIN, B_PIN])
+            if understanding == A_PIN:
                 print("[CHECK F14.1] Learner confirmed understanding. Continue with summary.")
             else:
                 print("[CHECK F14.2] Learner is still confused. Re-loop through guided explanation.")
@@ -408,9 +420,9 @@ def run_numina_engine():
         play_audio(AUDIO_SUMMARY)
         print("[PROMPT F16.0] 'Do you want to address alternative coursework sections?'")
         print(" -> Action Vector: [A] YES, return to loop | [B] NO, shut down")
-        loop_decision = wait_for_press([UP_PIN, DOWN_PIN])
+        loop_decision = wait_for_press([A_PIN, B_PIN])
 
-        if loop_decision == DOWN_PIN:
+        if loop_decision == B_PIN:
             print("[DEEP SLEEP F17.0] Powering down safe core registers.")
             break
 
