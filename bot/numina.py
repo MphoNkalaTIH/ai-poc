@@ -210,8 +210,15 @@ def emergency_stop_callback(channel):
 # 4. ROBUST DEBOUNCED PIN SAMPLING LOGIC
 # ==============================================================================
 def wait_for_press(target_pins, debounce_ms=20):
-    """Blocks active thread loop until a valid, debounced active-low press is seen."""
+    """Wait for a fresh active-low press, ignoring any button already held at call time."""
     print(f"[POLLING] Monitoring input keys on pins: {target_pins}...")
+
+    # Ignore any button already pressed before the user starts a new interaction.
+    while True:
+        if all(GPIO.input(pin) == GPIO.HIGH for pin in target_pins):
+            break
+        time.sleep(0.02)
+
     while True:
         for pin in target_pins:
             if GPIO.input(pin) == GPIO.LOW:
