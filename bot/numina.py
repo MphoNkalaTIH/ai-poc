@@ -11,6 +11,31 @@ from luma.core.interface.serial import noop, spi
 from luma.core.render import canvas
 from luma.led_matrix.device import max7219
 
+
+def is_raspberry_pi_environment():
+    """Return True only when the app is running on an actual Raspberry Pi OS host."""
+    try:
+        with open("/proc/device-tree/model", "r", encoding="utf-8", errors="ignore") as handle:
+            model = handle.read().strip()
+        return "Raspberry Pi" in model
+    except Exception:
+        return False
+
+
+def require_raspberry_pi_runtime():
+    if not is_raspberry_pi_environment():
+        raise RuntimeError(
+            "Numina must run on a physical Raspberry Pi 5 with Raspberry Pi OS. "
+            "GPIO access is unavailable in WSL, VM, or unsupported environments."
+        )
+
+
+def safe_gpio_cleanup():
+    try:
+        GPIO.cleanup()
+    except RuntimeError:
+        pass
+
 # ============================================================================== 
 # 1. HARDWARE HARD-CODED PIN ASSIGNMENTS (MATCHING INTEGRATION SPEC)
 # ==============================================================================
@@ -40,6 +65,8 @@ device_matrix = None
 def setup_hardware():
     global device_matrix
 
+    require_raspberry_pi_runtime()
+
     GPIO.setmode(GPIO.BCM)
     GPIO.setwarnings(False)
 
@@ -61,12 +88,21 @@ def setup_hardware():
         serial_spi = spi(port=0, device=0, gpio=noop())
         device_matrix = max7219(serial_spi, cascaded=1)
         device_matrix.contrast(30)  # Set modest brightness value to limit current spikes
+        device_matrix.clear()
+        time.sleep(0.1)
+        set_status("idle")
+        print("[MATRIX] MAX7219 ready and idle glyph displayed.")
     except Exception as e:
+        device_matrix = None
         print(f"[WARN] SPI MAX7219 Array initialization skipped: {e}")
 
 
 def set_status(state):
     """Uses the MAX7219 matrix to indicate the robot's live status."""
+    if device_matrix is None:
+        print(f"[MATRIX] state={state} (matrix unavailable; hardware not initialized)")
+        return
+
     if state == "idle":
         draw_matrix_glyph("idle")
     elif state == "processing":
@@ -75,6 +111,8 @@ def set_status(state):
         draw_matrix_glyph("error")
     else:
         draw_matrix_glyph("clear")
+
+    print(f"[MATRIX] state={state} rendered on MAX7219")
 
 
 def draw_matrix_glyph(glyph_type):
@@ -143,7 +181,7 @@ def emergency_stop_callback(channel):
     except Exception:
         pass
 
-    GPIO.cleanup()
+    safe_gpio_cleanup()
     print("[SYSTEM] Output pin layers neutralized successfully. Program execution halted.")
     sys.exit(0)
 
@@ -362,5 +400,9 @@ if __name__ == "__main__":
     try:
         run_numina_engine()
     except KeyboardInterrupt:
-        GPIO.cleanup()
+        safe_gpio_cleanup()
+    except RuntimeError as exc:
+        print(f"[RUNTIME ERROR] {exc}")
+        safe_gpio_cleanup()
+        sys.exit(1)
 
