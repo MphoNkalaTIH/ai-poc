@@ -4,13 +4,15 @@ import os
 import subprocess
 import sys
 import time
-
 import pygame
+
+# Suppress luma initialization errors when desktop environment links are unavailable
+os.environ["LUMA_NO_DISPLAY"] = "1"
+
 import RPi.GPIO as GPIO
 from luma.core.interface.serial import noop, spi
 from luma.core.render import canvas
 from luma.led_matrix.device import max7219
-
 
 def is_raspberry_pi_environment():
     """Return True only when the app is running on an actual Raspberry Pi OS host."""
@@ -21,7 +23,6 @@ def is_raspberry_pi_environment():
     except Exception:
         return False
 
-
 def require_raspberry_pi_runtime():
     if not is_raspberry_pi_environment():
         raise RuntimeError(
@@ -29,9 +30,9 @@ def require_raspberry_pi_runtime():
             "GPIO access is unavailable in WSL, VM, or unsupported environments."
         )
 
-
 def safe_gpio_cleanup():
     try:
+        print("[GPIO] Cleaning up peripheral registers and pin maps safely...")
         GPIO.cleanup()
     except RuntimeError:
         pass
@@ -61,46 +62,49 @@ CAPTURE_PATH = "/home/pi/numina/capture/problem_input.jpg"
 # ==============================================================================
 device_matrix = None
 
-
 def setup_hardware():
     global device_matrix
-
+    print("[INIT] Verifying system hardware environment requirements...")
     require_raspberry_pi_runtime()
 
+    print("[GPIO] Setting board numbering layout mode to BCM...")
     GPIO.setmode(GPIO.BCM)
     GPIO.setwarnings(False)
 
-    # Configure input keys with internal active pull-up networks
+    print("[GPIO] Initializing input buttons with internal software pull-up resistors...")
     for pin in [START_PIN, ESTOP_PIN, UP_PIN, DOWN_PIN, LEFT_PIN, RIGHT_PIN]:
         GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        print(f" -> Pin BCM {pin} initialized successfully as INPUT with PULL_UP.")
 
-    # Register emergency-stop interrupt only after GPIO is configured.
+    print("[GPIO] Registering high-priority hardware interrupt callback loop on E-STOP...")
     GPIO.add_event_detect(ESTOP_PIN, GPIO.FALLING, callback=emergency_stop_callback, bouncetime=200)
 
-    # Initialize asynchronous sound card audio mixers
+    print("[AUDIO] Initializing sound card hardware subsystem interfaces...")
     try:
         pygame.mixer.init()
+        print("[AUDIO] Pygame audio mixer successfully registered.")
     except Exception as e:
         print(f"[WARN] Audio card initialization deferred: {e}")
 
-    # Initialize the SPI interface layer for the MAX7219 matrix display
+    print("[SPI] Attempting to hook into high-speed MAX7219 Dot-Matrix display hardware bus...")
     try:
         serial_spi = spi(port=0, device=0, gpio=noop())
         device_matrix = max7219(serial_spi, cascaded=1)
-        device_matrix.contrast(30)  # Set modest brightness value to limit current spikes
+        device_matrix.contrast(30)  # Moderate current limit brightness threshold
         device_matrix.clear()
         time.sleep(0.1)
         set_status("idle")
-        print("[MATRIX] MAX7219 ready and idle glyph displayed.")
+        print("[MATRIX] SPI MAX7219 communication layer fully unblocked and verified.")
     except Exception as e:
         device_matrix = None
-        print(f"[WARN] SPI MAX7219 Array initialization skipped: {e}")
-
+        print(f"[WARN] SPI MAX7219 Array initialization skipped or failed: {e}")
 
 def set_status(state):
-    """Uses the MAX7219 matrix to indicate the robot's live status."""
+    """Updates the MAX7219 matrix to indicate the robot's live status."""
+    print(f"[TELEMETRY] System state transition requested -> State: '{state}'")
+
     if device_matrix is None:
-        print(f"[MATRIX] state={state} (matrix unavailable; hardware not initialized)")
+        print(f"[MATRIX] State='{state}' (Visual skipped; hardware frame unmapped)")
         return
 
     if state == "idle":
@@ -111,14 +115,11 @@ def set_status(state):
         draw_matrix_glyph("error")
     else:
         draw_matrix_glyph("clear")
-
-    print(f"[MATRIX] state={state} rendered on MAX7219")
-
+    print(f"[MATRIX] Graphic context for state='{state}' written onto screen panel.")
 
 def draw_matrix_glyph(glyph_type):
-    """Renders basic feedback expressions directly to the 8x8 matrix panel."""
+    """Renders precise static visual glyph blocks straight onto the 8x8 matrix panel."""
     global device_matrix
-
     if device_matrix is None:
         return
 
@@ -126,22 +127,22 @@ def draw_matrix_glyph(glyph_type):
         if glyph_type == "clear":
             device_matrix.clear()
         elif glyph_type == "idle":
-            # Small center dot = ready / idle state
+            # Small uniform center tracking node representing ready/standby
             for x, y in [(3, 3), (3, 4), (4, 3), (4, 4)]:
                 draw.point((x, y), fill="white")
         elif glyph_type == "processing":
-            # Animated progress bar pattern for active processing
+            # Bar pattern signifying backend operations/computing running
             for x in range(8):
                 if x % 2 == 0:
                     draw.point((x, 3), fill="white")
                     draw.point((x, 4), fill="white")
         elif glyph_type == "error":
-            # Large X mark for fault / emergency stop state
+            # Large systemic fault 'X' icon for crash/E-STOP state
             for x, y in [(0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7),
                          (0, 7), (1, 6), (2, 5), (3, 4), (4, 3), (5, 2), (6, 1), (7, 0)]:
                 draw.point((x, y), fill="white")
         elif glyph_type == "smile":
-            # Draw basic smiling face bounding coordinate dots
+            # Operational smiling mouth expression for friendly student interaction
             draw.point((1, 2), fill="white")
             draw.point((1, 5), fill="white")
             draw.point((4, 1), fill="white")
@@ -151,7 +152,7 @@ def draw_matrix_glyph(glyph_type):
             draw.point((5, 5), fill="white")
             draw.point((4, 6), fill="white")
         elif glyph_type == "arrow_right":
-            # Draw standard menu step progression navigation arrow
+            # Incremental workflow progression menu pointer arrow
             for x in range(2, 6):
                 draw.point((3, x), fill="white")
             draw.point((2, 4), fill="white")
@@ -159,55 +160,58 @@ def draw_matrix_glyph(glyph_type):
         else:
             device_matrix.clear()
 
-
 def emergency_stop_callback(channel):
     """High-priority hardware interrupt callback loop ensuring absolute mechanical safety."""
-    set_status("error")
-    print("\n[🚨 EMERGENCY SHUTDOWN TRIGGERED] Immediately killing active processes...")
-
-    # 1. Neutralize audio playback pipelines instantly
-    try:
-        pygame.mixer.music.stop()
-    except Exception:
-        pass
-
-    # 2. Kill hardware-accelerated video display instances completely
-    os.system("pkill vlc || pkill cvlc")
-
-    # 3. Clean up display matrices and baseline pins
+    print("\n[🚨 CRITICAL INTERRUPT] EMERGENCY SHUTDOWN TERMINATION EVENT ACTIVATED!")
+    
+    # 1. Force the matrix to display the error 'X' glyph instantly
     try:
         if device_matrix:
-            device_matrix.clear()
+            with canvas(device_matrix) as draw:
+                for x, y in [(0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7),
+                             (0, 7), (1, 6), (2, 5), (3, 4), (4, 3), (5, 2), (6, 1), (7, 0)]:
+                    draw.point((x, y), fill="white")
+            print("[E-STOP] Matrix display forced to ERROR mode.")
     except Exception:
         pass
 
-    safe_gpio_cleanup()
-    print("[SYSTEM] Output pin layers neutralized successfully. Program execution halted.")
-    sys.exit(0)
+    # 2. Kill active sounds immediately
+    try:
+        pygame.mixer.music.stop()
+        print("[E-STOP] Sound card playback pipelines neutralized.")
+    except Exception:
+        pass
 
+    # 3. Force terminate running video instances immediately
+    print("[E-STOP] Killing active video tasks...")
+    os.system("pkill vlc || pkill cvlc")
+
+    safe_gpio_cleanup()
+    print("[E-STOP] All logic pins safely neutralized. Terminating execution path completely.")
+    sys.exit(0)
 
 # ============================================================================== 
 # 4. ROBUST DEBOUNCED PIN SAMPLING LOGIC
 # ==============================================================================
 def wait_for_press(target_pins, debounce_ms=20):
     """Blocks active thread loop until a valid, debounced active-low press is seen."""
+    print(f"[POLLING] Monitoring input keys on pins: {target_pins}...")
     while True:
         for pin in target_pins:
             if GPIO.input(pin) == GPIO.LOW:
                 time.sleep(debounce_ms / 1000.0)
                 if GPIO.input(pin) == GPIO.LOW:
-                    # Hold processing thread until the finger clears the switch contact pad
+                    print(f"[POLLING] Pin BCM {pin} active state confirmed. Waiting for release...")
                     while GPIO.input(pin) == GPIO.LOW:
                         time.sleep(0.01)
+                    print(f"[POLLING] Pin BCM {pin} released. Returning token.")
                     return pin
         time.sleep(0.02)
-
 
 def select_grade():
     """Menu loop for selecting a grade using UP/DOWN and START as confirm."""
     selected_grade = 9
     print(f" -> Active Highlight Profile: Grade {selected_grade}")
-
     while True:
         key = wait_for_press([UP_PIN, DOWN_PIN, START_PIN])
         if key == UP_PIN and selected_grade < 12:
@@ -217,9 +221,8 @@ def select_grade():
             selected_grade -= 1
             print(f" -> Active Highlight Profile: Grade {selected_grade}")
         elif key == START_PIN:
-            print(f"[OK] Grade verification confirmed: Grade {selected_grade}")
+            print(f"[OK] Grade selection confirmed: Grade {selected_grade}")
             return selected_grade
-
 
 def select_option(options, label):
     """Generic left/right menu selector with START as confirm."""
@@ -228,6 +231,7 @@ def select_option(options, label):
 
     while True:
         key = wait_for_press([LEFT_PIN, RIGHT_PIN, START_PIN])
+
         if key == RIGHT_PIN:
             current_idx = (current_idx + 1) % len(options)
             print(f" -> {label}: {options[current_idx]}")
@@ -243,28 +247,35 @@ def select_option(options, label):
 # 5. MULTIMEDIA DEVICE DRIVER OVERLAYS
 # ==============================================================================
 def play_audio(file_path):
+    print(f"[MEDIA] Checking voice resource location: {file_path}")
+
     if not os.path.exists(file_path):
         print(f"[AUDIO EMULATOR] Mock play active for asset: {os.path.basename(file_path)}")
         time.sleep(2.5)
         return
 
     try:
+        print(f"[AUDIO] Streaming data blocks through sound card channel: {os.path.basename(file_path)}")
         pygame.mixer.music.load(file_path)
         pygame.mixer.music.play()
+
         while pygame.mixer.music.get_busy():
             time.sleep(0.1)
+
+        print("[AUDIO] Track block completed execution playback.")
     except Exception as e:
         print(f"[AUDIO ERROR] Playback error seen: {e}")
 
 
 def play_video(file_path):
+    print(f"[MEDIA] Checking visual resource location: {file_path}")
+
     if not os.path.exists(file_path):
         print("[VIDEO EMULATOR] Mock video rendering display on monitor console...")
         time.sleep(3.0)
         return
 
     print(f"[VIDEO RUNNING] Streaming visual assets to screen: {file_path}")
-    # Force VLC to boot in full-screen environment layer and self-terminate upon end
     cmd = f"cvlc --no-osd --fullscreen --play-and-exit {file_path} > /dev/null 2>&1"
     subprocess.Popen(cmd, shell=True)
 
@@ -273,7 +284,6 @@ def execute_camera_capture(output_path):
     print("[CAMERA MODULE 3] Running autofocus calibration capture routine...")
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-    # Target explicit single shot resolution values using clean libcamera architecture commands
     cmd = f"libcamera-still -t 1500 --autofocus-mode normal -o {output_path} --nopreview"
     res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     return res.returncode == 0 and os.path.exists(output_path)
@@ -285,40 +295,31 @@ def execute_camera_capture(output_path):
 def run_numina_engine():
     setup_hardware()
     print("======================================================")
-    print(" NUMINA BOT OPERATIONAL CORE: REVISION INTERACTION   ")
+    print(" NUMINA BOT OPERATIONAL CORE: LIFECYCLE INTERACTION   ")
     print("======================================================")
 
-    # Standby: show a visible idle glyph while waiting for the START button.
-    set_status("idle")
-
     while True:
-        # F1.0 / F2.0: standby and startup ready state
         print("\n[STANDBY F1.0] Awaiting user initialization signal via START switch...")
         set_status("idle")
         wait_for_press([START_PIN])
 
-        # F3.0: intro and onboarding
         set_status("processing")
         draw_matrix_glyph("smile")
         print("[ONBOARDING F3.0] Executing digital audio intro audio framework...")
         play_audio(AUDIO_INTRO)
 
-        # F4.0: select grade
         print("[CONFIG F4.0] Select target study grade (Grade 9 through Grade 12).")
         selected_grade = select_grade()
 
-        # F5.0: select topic
         print("[CONFIG F5.0] Select educational domain concept block. Press START to save.")
         concept_array = ["Linear Algebra", "Geometry Proofs", "Physics Dynamics", "Chemistry Moles"]
         selected_concept = select_option(concept_array, "Current Domain Selection")
         print(f"[OK] Concept parameter configured successfully: {selected_concept}")
 
-        # F6.0: select lesson vs problem path
         print("[ROUTING F6.0] Select Mode: [UP Key] Lesson Package | [DOWN Key] Problem Matrix Solver")
         mode_branch = wait_for_press([UP_PIN, DOWN_PIN])
 
         if mode_branch == UP_PIN:
-            # Lesson pathway: F7.0 -> F10.0
             print("[TRACK A] Deploying structured curriculum package F7.0...")
             print("[MEDIA F8.0] Syncing video stream visuals with microphone audio instructions...")
             play_video(VIDEO_LESSON)
@@ -327,6 +328,7 @@ def run_numina_engine():
             print("[EVALUATION F9.0] Pushing verification checklist challenge block...")
             print(" -> Interact to complete assessment quiz challenge: [UP for True | DOWN for False]")
             quiz_answer = wait_for_press([UP_PIN, DOWN_PIN])
+
             if quiz_answer == UP_PIN:
                 print("[CHECK F9.1] Student answered correctly. Moving to concept reinforcement.")
             else:
@@ -335,15 +337,14 @@ def run_numina_engine():
 
             print("[FACT OUTPUT F10.0] Directing real-world applications summary context block...")
             play_audio(AUDIO_FACT)
-
         else:
-            # Problem pathway: F11.0 -> F14.0
             print("[TRACK B] Deploying analytical scanner processor pipeline F11.0...")
             print(" -> Choose Input Source: [LEFT Key] Capture Camera Module | [RIGHT Key] Sample Storage")
             capture_mode = wait_for_press([LEFT_PIN, RIGHT_PIN])
 
             if capture_mode == LEFT_PIN:
                 print("[HARDWARE F11.1] Capturing workspace frame via CSI lens layout...")
+                set_status("processing")
                 if execute_camera_capture(CAPTURE_PATH):
                     print("[PARSING F11.2] Extracting structural equation tokens from captured picture...")
                 else:
@@ -374,7 +375,6 @@ def run_numina_engine():
                 print("[CHECK F14.2] Learner is still confused. Re-loop through guided explanation.")
                 play_audio(AUDIO_GUIDE)
 
-        # F15.0 -> F17.0: summary and repeat/exit decision
         print("[SUMMARY F15.0] Broadcasting logged classroom progress analytics metrics...")
         play_audio(AUDIO_SUMMARY)
         print("[PROMPT F16.0] 'Do you want to address alternative coursework sections?'")
@@ -382,18 +382,14 @@ def run_numina_engine():
         loop_decision = wait_for_press([UP_PIN, DOWN_PIN])
 
         if loop_decision == DOWN_PIN:
-            print("[DEEP SLEEP F17.0] Isolating system pins. Powering down safe core registers.")
+            print("[DEEP SLEEP F17.0] Powering down safe core registers.")
             break
 
+        print("[LOOP F17.1] Re-initializing configuration variables. Ready for the next learner session.")
         draw_matrix_glyph("clear")
-        GPIO.cleanup()
-        print("[TERMINATE COMPLETE] System architecture parked safely.")
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setwarnings(False)
-        for pin in [START_PIN, ESTOP_PIN, UP_PIN, DOWN_PIN, LEFT_PIN, RIGHT_PIN]:
-            GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.add_event_detect(ESTOP_PIN, GPIO.FALLING, callback=emergency_stop_callback, bouncetime=200)
-        print("[LOOP F17.1] Ready for the next learner session.")
+        safe_gpio_cleanup()
+
+    print("[TERMINATE COMPLETE] System architecture parked safely.")
 
 
 if __name__ == "__main__":
@@ -405,4 +401,3 @@ if __name__ == "__main__":
         print(f"[RUNTIME ERROR] {exc}")
         safe_gpio_cleanup()
         sys.exit(1)
-
