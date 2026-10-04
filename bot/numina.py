@@ -195,7 +195,7 @@ def wait_for_ui_selection(active_buttons=None, physical_pins=None):
                 sys.exit(0)
                 
             if event.type == pygame.MOUSEBUTTONDOWN and active_buttons:
-                mouse_pos = pygame.mouse.get_pos()
+                mouse_pos = getattr(event, "pos", pygame.mouse.get_pos())
                 for rect, idx in active_buttons:
                     x, y, w, h = rect
                     if x <= mouse_pos[0] <= x + w and y <= mouse_pos[1] <= y + h:
@@ -422,11 +422,11 @@ def gui_show_captured_image(image_path):
         text_surf = font_body.render(line, True, color)
         screen.blit(text_surf, (500, 130 + (i * 30)))
 
-    btn_rect = (480, 360, 280, 50)
-    draw_touch_button(btn_rect, "Next Action Workflow")
+    btn_rect = (480, 350, 280, 60)
+    draw_touch_button(btn_rect, "Continue", is_selected=True)
     pygame.display.flip()
     
-    wait_for_ui_selection(active_buttons=[(btn_rect, 0)])
+    wait_for_ui_selection(active_buttons=[(btn_rect, 0)], physical_pins=[START_PIN])
 
 def play_audio(file_path):
     if not os.path.exists(file_path): return
