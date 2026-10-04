@@ -440,20 +440,23 @@ def play_audio(file_path):
 # ==============================================================================
 def run_numina_engine():
     setup_hardware_and_gui()
+    skip_standby = False
 
     while True:
-        # 1. STANDBY WELCOME LAYOUT SCREEN
-        screen.fill(COLOR_BG)
-        pygame.draw.rect(screen, COLOR_CARD, (50, 50, 700, 380), border_radius=16)
-        
-        t_surf = font_title.render("NUMINA BOT CORE SYSTEMS OPERATIONAL", True, COLOR_SELECTED_BG)
-        b_surf = font_body.render("Press physical START button or tap screen to wake engine", True, COLOR_TEXT)
-        screen.blit(t_surf, (SCREEN_WIDTH//2 - t_surf.get_width()//2, 160))
-        screen.blit(b_surf, (SCREEN_WIDTH//2 - b_surf.get_width()//2, 240))
-        pygame.display.flip()
-        
-        wait_for_ui_selection(active_buttons=[((50, 50, 700, 380), 0)], physical_pins=[START_PIN])
-        play_audio(AUDIO_INTRO)
+        if not skip_standby:
+            # 1. STANDBY WELCOME LAYOUT SCREEN
+            screen.fill(COLOR_BG)
+            pygame.draw.rect(screen, COLOR_CARD, (50, 50, 700, 380), border_radius=16)
+            
+            t_surf = font_title.render("NUMINA BOT CORE SYSTEMS OPERATIONAL", True, COLOR_SELECTED_BG)
+            b_surf = font_body.render("Press physical START button or tap screen to wake engine", True, COLOR_TEXT)
+            screen.blit(t_surf, (SCREEN_WIDTH//2 - t_surf.get_width()//2, 160))
+            screen.blit(b_surf, (SCREEN_WIDTH//2 - b_surf.get_width()//2, 240))
+            pygame.display.flip()
+            
+            wait_for_ui_selection(active_buttons=[((50, 50, 700, 380), 0)], physical_pins=[START_PIN])
+            play_audio(AUDIO_INTRO)
+        skip_standby = False
 
         # 2. SELECT GRADE INTERFACE PANEL
         menu_items = ["Grade 9 Curriculum", "Grade 10 Curriculum", "Grade 11 Curriculum", "Grade 12 Curriculum"]
@@ -497,20 +500,20 @@ def run_numina_engine():
             gui_live_camera_capture_flow(CAPTURE_PATH)
             gui_show_captured_image(CAPTURE_PATH)
 
-        # 5. SUMMARY PROGRESS CLOSEOUT LAYOUT SCREEN
+        # 5. SESSION CLOSEOUT AND NEXT-STEP CHOICE
         play_audio(AUDIO_SUMMARY)
-        draw_ui_base("Coursework Lifecycle Metrics Complete")
-        pygame.draw.rect(screen, COLOR_CARD, (50, 100, 700, 320), border_radius=12)
-        lbl1 = font_title.render("Session Saved Successfully!", True, COLOR_SELECTED_BG)
-        lbl2 = font_body.render("Analytics data metrics safely pushed to configuration loops.", True, COLOR_TEXT)
-        screen.blit(lbl1, (120, 150))
-        screen.blit(lbl2, (120, 230))
-        
-        btn_rect = (250, 320, 300, 60)
-        draw_touch_button(btn_rect, "Restart Process Core Engine")
-        pygame.display.flip()
-        
-        wait_for_ui_selection(active_buttons=[(btn_rect, 0)])
+        while True:
+            next_steps = ["Capture Another Problem", "Return to Categories"]
+            btns = render_options_menu("Session Complete: Choose Next Step", next_steps)
+            src, idx = wait_for_ui_selection(active_buttons=btns, physical_pins=[A_PIN, B_PIN, C_PIN, D_PIN])
+            next_step = idx if src == "touch" else [A_PIN, B_PIN, C_PIN, D_PIN].index(idx)
+
+            if next_step == 1:
+                skip_standby = True
+                break
+
+            if gui_live_camera_capture_flow(CAPTURE_PATH):
+                gui_show_captured_image(CAPTURE_PATH)
 
 if __name__ == "__main__":
     try:
