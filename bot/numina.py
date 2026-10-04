@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 import os
+import io
+import selectors
+import shutil
 import subprocess
 import sys
 import time
@@ -255,111 +258,147 @@ def gui_play_video(file_path):
 # ==============================================================================
 # LIVE CAMERA PREVIEW BEFORE CAPTURE MODULE
 # ==============================================================================
+def extract_mjpeg_frames(buffer):
+    """Return complete JPEG frames and retain any incomplete trailing frame."""
+    frames = []
+    while True:
+        start = buffer.find(b'\xff\xd8')
+        if start == -1:
+            keep_marker_prefix = buffer[-1:] == b'\xff'
+            buffer[:] = buffer[-1:] if keep_marker_prefix else b''
+            break
+        if start:
+            del buffer[:start]
+
+        end = buffer.find(b'\xff\xd9', 2)
+        if end == -1:
+            break
+        frames.append(bytes(buffer[:end + 2]))
+        del buffer[:end + 2]
+    return frames
+
+
 def gui_live_camera_capture_flow(output_path):
-    """Pipes live camera frame streams onto the screen before firing final snapshot."""
-    draw_ui_base("Live Camera Space Workspace Alignment")
-    pygame.display.flip()
+    """Show a steady live preview, then save a full-resolution still image."""
+    output_dir = os.path.dirname(output_path) or "."
+    os.makedirs(output_dir, exist_ok=True)
+    temporary_path = output_path + ".tmp.jpg"
+    for stale_path in (output_path, temporary_path):
+        try:
+            os.remove(stale_path)
+        except FileNotFoundError:
+            pass
 
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    if os.path.exists(output_path):
-        try: os.remove(output_path)
-        except Exception: pass
-
-    # Run a low-overhead stream layout frame via ffmpeg capturing from the camera link
     c_w, c_h = 480, 270
     c_x, c_y = 40, 110
+    video_binary = shutil.which("rpicam-vid") or shutil.which("libcamera-vid")
+    still_binary = shutil.which("rpicam-still") or shutil.which("libcamera-still")
+    if not video_binary or not still_binary:
+        print("Camera capture requires rpicam-apps or the legacy libcamera-apps.")
+        return False
 
-    # Command captures raw frames directly from the hardware video node pipeline
     cmd = [
-        'libcamera-vid', '-t', '0', '--inline', '--width', str(c_w), '--height', str(c_h),
-        '--nopreview', '--codec', 'mjpeg', '-o', '-'
+        video_binary, "-t", "0", "--width", str(c_w), "--height", str(c_h),
+        "--nopreview", "--codec", "mjpeg", "-o", "-"
     ]
-    # Fallback to general rpicam system if libcamera path binary was unlinked
-    if not os.path.exists("/usr/bin/libcamera-vid") and os.path.exists("/usr/bin/rpicam-vid"):
-        cmd[0] = 'rpicam-vid'
+    try:
+        pipe = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0)
+    except OSError as error:
+        print(f"Unable to start camera preview: {error}")
+        return False
 
-    pipe = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=10**6)
-
-    # Capture Action Trigger Button Box UI
     btn_rect = (540, 220, 220, 70)
-    
     clock = pygame.time.Clock()
     awaiting_capture = True
-    
-    # Read loop constants for MJPEG boundary blocks
-    # JPEG files always start with 0xFFD8 and end with 0xFFD9
+    capture_requested = False
     buffer = bytearray()
-    
+    selector = selectors.DefaultSelector()
+    selector.register(pipe.stdout, selectors.EVENT_READ)
+
+    draw_ui_base("Live Preview: Align Problem Sheet")
+    pygame.draw.rect(screen, COLOR_CARD, (c_x - 4, c_y - 4, c_w + 8, c_h + 8), border_radius=6)
+    waiting_label = font_body.render("Waiting for camera frames...", True, COLOR_TEXT)
+    screen.blit(waiting_label, (c_x + 110, c_y + 120))
+    render_text_wrapped(screen, "Center problem code sheet in frame", COLOR_TEXT, (40, 390, 480, 40), font_body)
+    draw_touch_button(btn_rect, "SNAP IMAGE [D]", is_selected=True)
+    pygame.display.flip()
+
     try:
         while awaiting_capture:
-            # Draw UI components while running frame parsing loops
-            screen.fill(COLOR_BG)
-            pygame.draw.rect(screen, COLOR_CARD, (0, 0, SCREEN_WIDTH, 70))
-            title_surface = font_title.render("Live Preview: Align Problem Sheet", True, COLOR_TEXT)
-            screen.blit(title_surface, (25, 20))
-            pygame.draw.rect(screen, COLOR_ACCENT_BORDER, (0, 68, SCREEN_WIDTH, 2))
-
-            # Monitor click states
             for event in pygame.event.get():
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     mouse_pos = pygame.mouse.get_pos()
                     x, y, w, h = btn_rect
                     if x <= mouse_pos[0] <= x + w and y <= mouse_pos[1] <= y + h:
                         awaiting_capture = False
+                        capture_requested = True
 
-            # Monitor physical inputs (e.g. START_PIN or D_PIN triggers capture)
             if GPIO.input(START_PIN) == GPIO.LOW or GPIO.input(D_PIN) == GPIO.LOW:
                 awaiting_capture = False
+                capture_requested = True
 
-            # Parse the MJPEG byte stream feed
-            chunk = pipe.stdout.read(4096)
-            if not chunk:
-                break
-            buffer.extend(chunk)
+            if selector.select(timeout=0):
+                chunk = os.read(pipe.stdout.fileno(), 65536)
+                if not chunk:
+                    awaiting_capture = False
+                    continue
+                buffer.extend(chunk)
+                frames = extract_mjpeg_frames(buffer)
+                if len(buffer) > 4 * 1024 * 1024:
+                    buffer.clear()
 
-            # Locate complete image frames inside the active cache array
-            start = buffer.find(b'\xff\xd8')
-            end = buffer.find(b'\xff\xd9', start)
-            
-            if start != -1 and end != -1:
-                jpg_data = buffer[start:end+2]
-                buffer = buffer[end+2:] # Flush buffer forward
-                
-                try:
-                    # Load individual video frame streams dynamically into surface variables
-                    img_surface = pygame.image.load_frombytes(jpg_data, (c_w, c_h), 'JPG')
-                except Exception:
+                if frames:
                     try:
-                        # Fallback parsing strategy
-                        import io
-                        img_io = io.BytesIO(jpg_data)
-                        img_surface = pygame.image.load(img_io)
-                    except Exception:
+                        img_surface = pygame.image.load(io.BytesIO(frames[-1])).convert()
+                        img_surface = pygame.transform.smoothscale(img_surface, (c_w, c_h))
+                    except (pygame.error, ValueError):
                         img_surface = None
 
-                if img_surface:
-                    pygame.draw.rect(screen, COLOR_CARD, (c_x-4, c_y-4, c_w+8, c_h+8), border_radius=6)
-                    screen.blit(img_surface, (c_x, c_y))
+                    if img_surface:
+                        pygame.draw.rect(screen, COLOR_CARD, (c_x - 4, c_y - 4, c_w + 8, c_h + 8), border_radius=6)
+                        screen.blit(img_surface, (c_x, c_y))
+                        pygame.display.update((c_x - 4, c_y - 4, c_w + 8, c_h + 8))
+            elif pipe.poll() is not None:
+                awaiting_capture = False
 
-            # Keep render text loops running seamlessly beside video preview frames
-            lbl = font_body.render("Center problem code sheet in frame", True, COLOR_TEXT)
-            screen.blit(lbl, (40, 400))
+            clock.tick(30)
 
-            draw_touch_button(btn_rect, "SNAP IMAGE [D]", is_selected=True)
-            pygame.display.flip()
-            clock.tick(24) # Smooth preview frame updates
-            
     finally:
+        selector.close()
         pipe.terminate()
-        pipe.wait()
+        try:
+            pipe.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            pipe.kill()
+            pipe.wait()
 
-    # Trigger high-resolution capture file save
-    draw_ui_base("Freezing Frame Capture Snapshot...")
-    pygame.display.flip()
-    
-    still_cmd = f"rpicam-still -t 100 --nopreview -o {output_path}"
-    subprocess.run(still_cmd, shell=True, capture_output=True)
-    return os.path.exists(output_path)
+    if not capture_requested:
+        return False
+
+    status_rect = (530, 310, 250, 60)
+    pygame.draw.rect(screen, COLOR_BG, status_rect)
+    status_label = font_body.render("Capturing full-resolution image...", True, COLOR_TEXT)
+    screen.blit(status_label, (540, 325))
+    pygame.display.update(status_rect)
+
+    still_cmd = [still_binary, "-t", "1000", "--nopreview", "-o", temporary_path]
+    try:
+        result = subprocess.run(still_cmd, capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        print(f"Still image capture failed: {error}")
+        return False
+
+    if result.returncode != 0 or not os.path.isfile(temporary_path) or os.path.getsize(temporary_path) == 0:
+        if result.stderr:
+            print(f"Still image capture failed: {result.stderr.strip()}")
+        try:
+            os.remove(temporary_path)
+        except FileNotFoundError:
+            pass
+        return False
+
+    os.replace(temporary_path, output_path)
+    return True
 
 def gui_show_captured_image(image_path):
     draw_ui_base("Analytical Workspace Capture Resolved")
