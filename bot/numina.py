@@ -16,7 +16,7 @@ from luma.led_matrix.device import max7219
 
 
 def is_raspberry_pi_environment():
-    """Return True only when the app is running on an actual Raspberry Pi OS host."""
+    \"\"\"Return True only when the app is running on an actual Raspberry Pi OS host.\"\"\"
     try:
         with open("/proc/device-tree/model", "r", encoding="utf-8", errors="ignore") as handle:
             model = handle.read().strip()
@@ -44,6 +44,11 @@ A_PIN = 18  # Physical Pin 12
 B_PIN = 23  # Physical Pin 16
 C_PIN = 24  # Physical Pin 18
 D_PIN = 25  # Physical Pin 22
+
+# ==============================================================================
+# INTEGRATED: HIGH SENSITIVITY SOUND MICROPHONE MODULE PIN
+# ==============================================================================
+MIC_SENSOR_PIN = 17  # Physical Pin 11 (Digital Output from KY module)
 
 NAV_BUTTONS = [
     ("A", A_PIN),
@@ -94,6 +99,12 @@ def setup_hardware():
         GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         print(f" -> Pin BCM {pin} initialized successfully as INPUT with PULL_UP.")
 
+    # ==============================================================================
+    # INTEGRATED: INITIALIZE THE DIGITAL MIC SENSOR PIN
+    # ==============================================================================
+    GPIO.setup(MIC_SENSOR_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+    print(f" -> Mic Sensor Pin BCM {MIC_SENSOR_PIN} initialized successfully with PULL_UP.")
+
     print("[GPIO] Registering high-priority hardware interrupt callback loop on E-STOP...")
     GPIO.add_event_detect(ESTOP_PIN, GPIO.FALLING, callback=emergency_stop_callback, bouncetime=200)
 
@@ -119,7 +130,7 @@ def setup_hardware():
 
 
 def set_status(state):
-    """Updates the MAX7219 matrix to indicate the robot's live status."""
+    \"\"\"Updates the MAX7219 matrix to indicate the robot's live status.\"\"\"
     print(f"[TELEMETRY] System state transition requested -> State: '{state}'")
 
     if device_matrix is None:
@@ -138,7 +149,7 @@ def set_status(state):
 
 
 def draw_matrix_glyph(glyph_type):
-    """Renders precise static visual glyph blocks straight onto the 8x8 matrix panel."""
+    \"\"\"Renders precise static visual glyph blocks straight onto the 8x8 matrix panel.\"\"\"
     global device_matrix
     if device_matrix is None:
         return
@@ -179,7 +190,7 @@ def draw_matrix_glyph(glyph_type):
 
 
 def emergency_stop_callback(channel):
-    """High-priority hardware interrupt callback loop ensuring absolute mechanical safety."""
+    \"\"\"High-priority hardware interrupt callback loop ensuring absolute mechanical safety.\"\"\"
     print("\n[🚨 CRITICAL INTERRUPT] EMERGENCY SHUTDOWN TERMINATION EVENT ACTIVATED!")
 
     try:
@@ -210,7 +221,7 @@ def emergency_stop_callback(channel):
 # 4. ROBUST DEBOUNCED PIN SAMPLING LOGIC (WITH RACE-CONDITION IMMUNITY)
 # ==============================================================================
 def wait_for_press(target_pins, debounce_ms=20):
-    """Wait for a fresh active-low press, ignoring any button already held at call time."""
+    \"\"\"Wait for a fresh active-low press, ignoring any button already held at call time.\"\"\"
     print(f"[POLLING] Monitoring input keys on pins: {target_pins}...")
 
     try:
@@ -236,9 +247,47 @@ def wait_for_press(target_pins, debounce_ms=20):
         sys.exit(0)
 
 
+# ==============================================================================
+# INTEGRATED: POLLING MECHANISM FOR MIC RECOGNITION (CLAP SOUND DETECTION)
+# ==============================================================================
+def wait_for_button_or_clap(target_button_pin, sound_pin, timeout_ms=10000):
+    \"\"\"
+    Simultaneously listens for a specific hardware button press OR a distinct sound spike.
+    Returns which hardware asset triggered the unblock ('button' or 'mic').
+    \"\"\"
+    print(f"[POLLING] Blended entry active. Awaiting Button BCM {target_button_pin} OR sound wave on Pin BCM {sound_pin}...")
+    start_time = time.time()
+    
+    # Pre-check to clear any active held inputs
+    while GPIO.input(target_button_pin) == GPIO.LOW or GPIO.input(sound_pin) == GPIO.LOW:
+        if (time.time() - start_time) * 1000 > timeout_ms:
+            break
+        time.sleep(0.01)
+
+    while True:
+        # Check physical button loop structure
+        if GPIO.input(target_button_pin) == GPIO.LOW:
+            time.sleep(0.02) # debounce
+            if GPIO.input(target_button_pin) == GPIO.LOW:
+                while GPIO.input(target_button_pin) == GPIO.LOW:
+                    time.sleep(0.01)
+                return "button"
+
+        # Check microphone sensor threshold state
+        if GPIO.input(sound_pin) == GPIO.LOW:
+            time.sleep(0.01) # fast sound-spike check
+            if GPIO.input(sound_pin) == GPIO.LOW:
+                print("[MIC SENSOR] Acoustic signal registered above potentiometer limit.")
+                # Brief lockout window so a single hand clap echo doesn't trigger multiple events
+                time.sleep(0.3) 
+                return "mic"
+                
+        time.sleep(0.01)
+
+
 def select_grade():
-    """Grade selection using explicit A/B/C/D key press to advance directly."""
-    print(" -> Grade selection selection active: [A]=Grade 9 | [B]=Grade 10 | [C]=Grade 11 | [D]=Grade 12")
+    \"\"\"Grade selection using explicit A/B/C/D key press to advance directly.\"\"\"
+    print(" -> Grade selection active: [A]=Grade 9 | [B]=Grade 10 | [C]=Grade 11 | [D]=Grade 12")
     key = wait_for_press([A_PIN, B_PIN, C_PIN, D_PIN])
     chosen_grade = GRADE_BY_BUTTON[key]
     print(f"[OK] Grade selection locked and auto-confirmed: Grade {chosen_grade}")
@@ -246,7 +295,7 @@ def select_grade():
 
 
 def select_option(options, label):
-    """Multi-choice topic selector using structural key parameters to advance directly."""
+    \"\"\"Multi-choice topic selector using structural key parameters to advance directly.\"\"\"
     if not options:
         return None
 
@@ -294,14 +343,34 @@ def play_video(file_path):
     subprocess.Popen(cmd, shell=True)
 
 
+# ==============================================================================
+# OPTIMISED: ROBUST CAMERA FRAME CAPTURE MECHANISM FOR RASPBERRY PI 5
+# ==============================================================================
 def execute_camera_capture(output_path):
     print("[CAMERA MODULE 3] Running high-speed headless frame capture sequence...")
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-    # Exposure stabilized timing window parameter to eliminate auto-exposure sensor lockups
+    # Clean out older test assets to prevent false positive check reads
+    if os.path.exists(output_path):
+        try:
+            os.remove(output_path)
+        except Exception:
+            pass
+
+    # Optimized timing parameter to allow fast lens exposure metering without sensor lockups
     cmd = f"rpicam-still -t 100 --nopreview -o {output_path}"
     res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-    return res.returncode == 0 and os.path.exists(output_path)
+    
+    # Direct diagnostic output trap if systemic issues exist
+    if res.returncode != 0:
+        print(f"[CAMERA ERROR] Command execution failed (Code: {res.returncode})")
+        if "Permission denied" in res.stderr or "access" in res.stderr.lower():
+            print("[CAMERA FAULT] System permission blockade suspected! Run: 'sudo usermod -aG video $USER' and restart terminal.")
+        else:
+            print(f"[CAMERA LOGS] Error Traceback Details: {res.stderr.strip()}")
+        return False
+
+    return os.path.exists(output_path)
 
 
 # ============================================================================== 
@@ -401,7 +470,7 @@ def run_numina_engine():
                 if execute_camera_capture(CAPTURE_PATH):
                     print(f"[PARSING F11.2] Extracting structural tokens from file: {CAPTURE_PATH}")
                 else:
-                    print("[WARN] Camera frame capture pipeline timed out. Utilizing storage fallback indices.")
+                    print("[WARN] Camera frame capture pipeline failed or timed out. Utilizing storage fallback indices.")
             else:
                 print("[DATABASE F11.3] Parsing targeted sample example question blocks...")
                 print("[ANALYSIS F12.0] Problem processing resolved: '3x + 9 = 24'")
@@ -415,8 +484,13 @@ def run_numina_engine():
 
                 draw_matrix_glyph("arrow_right")
                 play_audio(AUDIO_GUIDE)
-                print(" -> [Control Interaction] Tap D button to progress workflow...")
-                wait_for_press([D_PIN])
+                
+                # ==============================================================================
+                # INTEGRATED: REPLACE SIMPLE BUTTON WAIT WITH COMBINED BUTTON/MIC POLL
+                # ==============================================================================
+                print(" -> [Control Interaction] Tap D button OR clap hands loudly near the microphone to progress workflow...")
+                trigger_source = wait_for_button_or_clap(D_PIN, MIC_SENSOR_PIN)
+                print(f"[OK] System unblocked successfully via: {trigger_source.upper()}")
 
             print("[CHECK F14.0] Verifying understanding matrix parameters. [A] Understood | [B] Confused")
             understanding = wait_for_press([A_PIN, B_PIN])
@@ -444,7 +518,7 @@ def run_numina_engine():
 
 if __name__ == "__main__":
     try:
-        run_numina_engine()
+        run_numina_engine.py()
     except KeyboardInterrupt:
         sys.exit(0)
     except RuntimeError as exc:

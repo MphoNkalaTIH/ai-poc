@@ -2,12 +2,13 @@
 MASTER END-TO-END HARDWARE INTEGRATION GUIDE: NUMINA HIGH SCHOOL ROBOT
 ===============================================================================
 Target System: Raspberry Pi 5 (2GB) with Monitor Swap & 100nF Audio Modification
-Document Version: 2.0 (Complete Comprehensive Hardware Layout)
+Document Version: 3.0 (Complete Comprehensive Hardware Layout with KY Sound Sensor)
 
 This file contains the absolute end-to-end master hardware schematic map for the
 Numina teaching robot. Every component from the input switches, status indicator 
-LED arrays, custom audio path adapters, to the SPI-driven MAX7219 LED Matrix is 
-laid out step-by-step with explicit pin-to-pin definitions.
+LED arrays, custom audio path adapters, the SPI-driven MAX7219 LED Matrix, to the
+KY High Sensitivity Sound Microphone Sensor Module is laid out step-by-step with
+explicit pin-to-pin definitions.
 
 -------------------------------------------------------------------------------
 SECTION 1: ISOLATED POWER DISTRIBUTION  [done]
@@ -50,19 +51,19 @@ common shared Ground (GND) rail. Software will initialize internal pull-up profi
   * Button Terminal 2 -> Shared Ground Rail
 
 - BUTTON 3: NAVIGATION UP SWITCH
-  * Button Terminal 1 -> Raspberry Pi 5 Physical Pin 16 (GPIO 23)
+  * Button Terminal 1 -> Raspberry Pi 5 Physical Pin 12 (GPIO 18)
   * Button Terminal 2 -> Shared Ground Rail
 
 - BUTTON 4: NAVIGATION DOWN SWITCH
-  * Button Terminal 1 -> Raspberry Pi 5 Physical Pin 18 (GPIO 24)
+  * Button Terminal 1 -> Raspberry Pi 5 Physical Pin 16 (GPIO 23)
   * Button Terminal 2 -> Shared Ground Rail
 
 - BUTTON 5: NAVIGATION LEFT SWITCH
-  * Button Terminal 1 -> Raspberry Pi 5 Physical Pin 22 (GPIO 25)
+  * Button Terminal 1 -> Raspberry Pi 5 Physical Pin 18 (GPIO 24)
   * Button Terminal 2 -> Shared Ground Rail
 
 - BUTTON 6: NAVIGATION RIGHT SWITCH
-  * Button Terminal 1 -> Raspberry Pi 5 Physical Pin 37 (GPIO 26)
+  * Button Terminal 1 -> Raspberry Pi 5 Physical Pin 22 (GPIO 25)
   * Button Terminal 2 -> Shared Ground Rail
 
 -------------------------------------------------------------------------------
@@ -96,6 +97,16 @@ C. Amplifier Outputs to Logitech Mono Speaker:
    2. Connect the Logitech Speaker Negative (-) wire to PAM8403 "Lout-" terminal.
    3. Leave the Rout+ and Rout- terminals completely unpopulated.
 
+-------------------------------------------------------------------------------
+SECTION 4: KY HIGH SENSITIVITY SOUND MICROPHONE SENSOR MODULE
+-------------------------------------------------------------------------------
+The KY Sound Sensor module provides real-time digital sound threshold detection 
+(e.g., handclaps) to supplement the manual navigation interface.
+
+1. KY Sensor VCC / + Pin   -> Raspberry Pi 5 Physical Pin 4 (+5V Logic Power)
+2. KY Sensor GND / G Pin   -> Raspberry Pi 5 Physical Pin 14 (GND)
+3. KY Sensor DO Pin        -> Raspberry Pi 5 Physical Pin 11 (GPIO 17 / Input)
+4. KY Sensor AO Pin        -> Leave Disconnected (Unused Analog Output)
 
 -------------------------------------------------------------------------------
 SECTION 5: MAX7219 8x8 LED MATRIX DISPLAY BUS ARRAY
@@ -103,7 +114,7 @@ SECTION 5: MAX7219 8x8 LED MATRIX DISPLAY BUS ARRAY
 The 8x8 LED Dot-Matrix display utilizes the high-speed hardware SPI bus channels
 on the Raspberry Pi 5 to draw interactive facial expressions and characters.
 
-1. MAX7219 VCC Pin  -> Raspberry Pi 5 Physical Pin 4 (+5V Core Logic Power)
+1. MAX7219 VCC Pin  -> Raspberry Pi 5 Physical Pin 2 (+5V Core Logic Power - Shared via distribution)
 2. MAX7219 GND Pin  -> Raspberry Pi 5 Physical Pin 9 (GND)
 3. MAX7219 DIN Pin  -> Raspberry Pi 5 Physical Pin 19 (GPIO 10 / Hardware SPI_MOSI)
 4. MAX7219 CS Pin   -> Raspberry Pi 5 Physical Pin 24 (GPIO 8 / Hardware SPI_CE0)
