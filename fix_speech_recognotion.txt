@@ -1,0 +1,15 @@
+# 1. Install the required system audio frameworks and development tools
+sudo apt update && sudo apt install -y portaudio19-dev python3-dev build-essential
+
+# 2. Install the exact case-sensitive speech recognition modules inside your virtual environment
+/home/pi/numina-venv/bin/pip install SpeechRecognition pyaudio vosk sympy pyttsx3
+
+# 3. Use the correct speech tool argument to automatically download the lightweight offline language model
+/home/pi/numina-venv/bin/python3 -m speech_recognition.cli download vosk
+
+# 4. Kill any rogue or automated background tasks that lock up the Raspberry Pi 5 GPIO pins
+sudo systemctl stop numina.service
+sudo pkill -f numina.py
+
+# 5. Launch your master interactive graphical user interface application script
+/home/pi/numina-venv/bin/python3 /home/pi/numina/numina.py

@@ -11,7 +11,7 @@ User=pi
 WorkingDirectory=/home/pi/numina
 Environment=PYTHONUNBUFFERED=1
 # Run the current GUI app with the virtual environment containing its Python dependencies.
-ExecStart=/home/pi/numina/numina-venv/bin/python /home/pi/numina/numina.py
+ExecStart=/home/pi/numina-venv/bin/python /home/pi/numina/numina.py
 Restart=always
 RestartSec=5
 

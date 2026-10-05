@@ -42,8 +42,8 @@ Install the required packages:
   sudo apt update
   sudo apt install -y python3-pip python3-dev python3-pyaudio portaudio19-dev espeak-ng
   cd /home/pi/numina
-  source numina-venv/bin/activate
-  python -m pip install -r requirements.txt
+  source /home/pi/numina-venv/bin/activate
+  python -m pip install -r /home/pi/numina/requirements.txt
   python -c "import speech_recognition as sr; print(sr.__file__)"
 
 For offline spoken questions, download the Vosk English speech model once from the project folder:
@@ -68,7 +68,7 @@ System startup
 To run the script manually:
 
   cd /home/pi/numina
-  source numina-venv/bin/activate
+  source /home/pi/numina-venv/bin/activate
   python numina.py
 
 To run it as a background system service:
@@ -78,7 +78,7 @@ To run it as a background system service:
   sudo systemctl enable numina.service
   sudo systemctl restart numina.service
 
-The service runs `/home/pi/numina/numina.py` with `/home/pi/numina/numina-venv/bin/python`, matching the virtual environment used to install `requirements.txt`.
+The service runs `/home/pi/numina/numina.py` with `/home/pi/numina-venv/bin/python`, matching the sibling virtual environment used to install `/home/pi/numina/requirements.txt`.
 
 Check status:
 
