@@ -5,7 +5,9 @@ import selectors
 import shutil
 import subprocess
 import sys
+import threading
 import time
+import queue
 import pygame
 import RPi.GPIO as GPIO
 
@@ -206,54 +208,91 @@ def wait_for_ui_selection(active_buttons=None, physical_pins=None):
 # 6. LEKKER MEDIA STREAMING ENGINE (640x360 Frame-Locked Resolution)
 # ==============================================================================
 def gui_play_video(file_path):
-    """Streams lesson mp4 file natively into a high-performance 30fps framebuffer block."""
-    draw_ui_base("Streaming Media Lesson Profile...")
-    pygame.display.flip()
-
+    """Play the lesson in an aspect-preserving viewport without blocking the UI."""
     if not os.path.exists(file_path):
         time.sleep(2)
         return
 
-    # Scale the reading frame to 640x360 to decrease processing overhead on the Pi
-    v_w, v_h = 640, 360
-    v_x, v_y = (SCREEN_WIDTH - v_w) // 2, 85
-
-    # Optimize the pipeline to stabilize framerate drops over screensharing links
+    v_w, v_h = 720, 340
+    v_x, v_y = (SCREEN_WIDTH - v_w) // 2, 82
+    frame_bytes = v_w * v_h * 3
     cmd = [
-        'ffmpeg', '-re', '-i', file_path, '-f', 'image2pipe', 
-        '-pix_fmt', 'rgb24', '-s', f'{v_w}x{v_h}', '-vcodec', 'rawvideo', '-'
+        "ffmpeg", "-re", "-i", file_path,
+        "-vf", f"scale={v_w}:{v_h}:force_original_aspect_ratio=decrease,pad={v_w}:{v_h}:(ow-iw)/2:(oh-ih)/2:color=0x0f121a",
+        "-pix_fmt", "rgb24", "-f", "rawvideo", "-vsync", "0", "-"
     ]
-    pipe = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=10**7)
+    try:
+        pipe = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0)
+    except OSError as error:
+        print(f"Unable to start lesson video playback: {error}")
+        return
+
+    frame_queue = queue.Queue(maxsize=2)
+    reader_done = threading.Event()
+
+    def read_frames():
+        try:
+            while True:
+                frame = bytearray()
+                while len(frame) < frame_bytes:
+                    chunk = pipe.stdout.read(frame_bytes - len(frame))
+                    if not chunk:
+                        return
+                    frame.extend(chunk)
+
+                if frame_queue.full():
+                    try:
+                        frame_queue.get_nowait()
+                    except queue.Empty:
+                        pass
+                try:
+                    frame_queue.put_nowait(bytes(frame))
+                except queue.Full:
+                    pass
+        finally:
+            reader_done.set()
+
+    reader_thread = threading.Thread(target=read_frames, daemon=True)
+    reader_thread.start()
+
+    draw_ui_base("Streaming Media Lesson Profile...")
+    pygame.draw.rect(screen, COLOR_CARD, (v_x - 4, v_y - 4, v_w + 8, v_h + 8), border_radius=6)
+    lbl = font_body.render("Tap screen anywhere to skip lesson video", True, COLOR_TEXT)
+    screen.blit(lbl, (SCREEN_WIDTH // 2 - lbl.get_width() // 2, 452))
+    pygame.display.flip()
 
     clock = pygame.time.Clock()
     running_video = True
-    
     try:
         while running_video:
             for event in pygame.event.get():
                 if event.type == pygame.MOUSEBUTTONDOWN:
-                    running_video = False # Tap anywhere to exit video playback loop cleanly
+                    running_video = False
 
-            # Read a precise single video frame chunk from the memory pipe layout
-            frame_bytes = v_w * v_h * 3
-            raw_image = pipe.stdout.read(frame_bytes)
-            if not raw_image or len(raw_image) < frame_bytes:
+            raw_image = None
+            while True:
+                try:
+                    raw_image = frame_queue.get_nowait()
+                except queue.Empty:
+                    break
+
+            if raw_image is not None:
+                video_surface = pygame.image.frombuffer(raw_image, (v_w, v_h), "RGB").copy()
+                screen.blit(video_surface, (v_x, v_y))
+                pygame.display.update((v_x - 4, v_y - 4, v_w + 8, v_h + 8))
+
+            if reader_done.is_set() and frame_queue.empty():
                 break
 
-            video_surface = pygame.image.fromstring(raw_image, (v_w, v_h), 'RGB')
-            
-            # Frame card boundary setup
-            pygame.draw.rect(screen, COLOR_CARD, (v_x-4, v_y-4, v_w+8, v_h+8), border_radius=6)
-            screen.blit(video_surface, (v_x, v_y))
-            
-            lbl = font_body.render("Tap screen anywhere to skip lesson video", True, COLOR_TEXT)
-            screen.blit(lbl, (SCREEN_WIDTH//2 - lbl.get_width()//2, 452))
-            
-            pygame.display.flip()
-            clock.tick(30) # Lock to rock-solid 30fps frame metrics loop
+            clock.tick(60)
     finally:
         pipe.terminate()
-        pipe.wait()
+        try:
+            pipe.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            pipe.kill()
+            pipe.wait()
+        reader_thread.join(timeout=1)
 
 # ==============================================================================
 # LIVE CAMERA PREVIEW BEFORE CAPTURE MODULE
