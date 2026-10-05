@@ -73,6 +73,51 @@ font_title = None
 font_body = None
 device_matrix = None
 
+
+def draw_matrix_glyph(glyph_type, selected_index=None):
+    if device_matrix is None:
+        return
+
+    with canvas(device_matrix) as draw:
+        if glyph_type == "menu":
+            cells = [(1, 1), (5, 1), (1, 5), (5, 5)]
+            for index, (x, y) in enumerate(cells):
+                if selected_index == index:
+                    for px in range(x, x + 2):
+                        for py in range(y, y + 2):
+                            draw.point((px, py), fill="white")
+                else:
+                    draw.point((x, y), fill="white")
+        elif glyph_type == "idle":
+            for x, y in [(3, 2), (2, 3), (3, 3), (4, 3), (3, 4)]:
+                draw.point((x, y), fill="white")
+        elif glyph_type == "processing":
+            for x in range(1, 7):
+                draw.point((x, 3), fill="white")
+                draw.point((x, 4), fill="white")
+        elif glyph_type == "lesson":
+            for y in range(1, 7):
+                draw.point((2, y), fill="white")
+            for x, y in [(3, 2), (3, 6), (4, 3), (4, 5), (5, 4)]:
+                draw.point((x, y), fill="white")
+        elif glyph_type == "camera":
+            for x in range(1, 7):
+                draw.point((x, 2), fill="white")
+                draw.point((x, 6), fill="white")
+            for y in range(3, 6):
+                draw.point((1, y), fill="white")
+                draw.point((6, y), fill="white")
+            for x, y in [(3, 3), (4, 3), (2, 4), (5, 4), (3, 5), (4, 5)]:
+                draw.point((x, y), fill="white")
+        elif glyph_type == "complete":
+            for x, y in [(1, 4), (2, 5), (3, 6), (4, 5), (5, 4), (6, 3), (7, 2)]:
+                draw.point((x, y), fill="white")
+        elif glyph_type == "error":
+            for index in range(1, 7):
+                draw.point((index, index), fill="white")
+                draw.point((index, 7 - index), fill="white")
+
+
 def setup_hardware_and_gui():
     global device_matrix, screen, font_title, font_body
     require_raspberry_pi_runtime()
@@ -96,9 +141,10 @@ def setup_hardware_and_gui():
         serial_spi = spi(port=0, device=0, gpio=noop())
         device_matrix = max7219(serial_spi, cascaded=1)
         device_matrix.contrast(30)
-        device_matrix.clear()
-    except Exception:
+        draw_matrix_glyph("idle")
+    except Exception as error:
         device_matrix = None
+        print(f"MAX7219 matrix unavailable: {error}")
 
 def emergency_stop_callback(channel):
     pygame.mixer.music.stop()
@@ -161,6 +207,7 @@ def draw_touch_button(rect, text, is_selected=False):
 def render_options_menu(title, options_list, selected_index=None):
     """Generates a balanced, spacious grid configuration layout across the screen."""
     draw_ui_base(title)
+    draw_matrix_glyph("menu", selected_index)
     
     # 4 distinct layout blocks providing 30px spacing between margins and columns
     buttons = [
@@ -210,6 +257,7 @@ def wait_for_ui_selection(active_buttons=None, physical_pins=None):
 # ==============================================================================
 def gui_play_video(file_path):
     """Play the lesson in an aspect-preserving viewport without blocking the UI."""
+    draw_matrix_glyph("lesson")
     if not os.path.exists(file_path):
         time.sleep(2)
         return
@@ -357,6 +405,7 @@ def extract_mjpeg_frames(buffer):
 
 def gui_live_camera_capture_flow(output_path):
     """Show a steady live preview, then save a full-resolution still image."""
+    draw_matrix_glyph("camera")
     output_dir = os.path.dirname(output_path) or "."
     os.makedirs(output_dir, exist_ok=True)
     temporary_path = output_path + ".tmp.jpg"
@@ -453,6 +502,7 @@ def gui_live_camera_capture_flow(output_path):
         return False
 
     status_rect = (530, 310, 250, 60)
+    draw_matrix_glyph("processing")
     pygame.draw.rect(screen, COLOR_BG, status_rect)
     status_label = font_body.render("Capturing full-resolution image...", True, COLOR_TEXT)
     screen.blit(status_label, (540, 325))
@@ -478,6 +528,7 @@ def gui_live_camera_capture_flow(output_path):
     return True
 
 def gui_show_captured_image(image_path):
+    draw_matrix_glyph("complete")
     draw_ui_base("Analytical Workspace Capture Resolved")
     
     if os.path.exists(image_path):
@@ -522,6 +573,7 @@ def run_numina_engine():
     while True:
         if not skip_standby:
             # 1. STANDBY WELCOME LAYOUT SCREEN
+            draw_matrix_glyph("idle")
             screen.fill(COLOR_BG)
             pygame.draw.rect(screen, COLOR_CARD, (50, 50, 700, 380), border_radius=16)
             
@@ -532,6 +584,7 @@ def run_numina_engine():
             pygame.display.flip()
             
             wait_for_ui_selection(active_buttons=[((50, 50, 700, 380), 0)], physical_pins=[START_PIN])
+            draw_matrix_glyph("processing")
             play_audio(AUDIO_INTRO)
         skip_standby = False
 
@@ -582,6 +635,7 @@ def run_numina_engine():
             gui_show_captured_image(CAPTURE_PATH)
 
         # 5. SESSION CLOSEOUT AND NEXT-STEP CHOICE
+        draw_matrix_glyph("complete")
         play_audio(AUDIO_SUMMARY)
         while True:
             next_steps = ["Capture Another Problem", "Return to Categories"]
