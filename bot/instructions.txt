@@ -40,8 +40,15 @@ Python dependencies
 Install the required packages:
 
   sudo apt update
-  sudo apt install -y python3-pip python3-dev
-  pip3 install RPi.GPIO pygame luma.core luma.led-matrix
+  sudo apt install -y python3-pip python3-dev python3-pyaudio portaudio19-dev espeak-ng
+  pip3 install -r /home/pi/numina/requirements.txt
+
+For offline spoken questions, download the Vosk English speech model once from the project folder:
+
+  cd /home/pi/numina
+  sprc download vosk
+
+The model is downloaded into the local `model` folder and does not require network access while Numina is running.
 
 For audio and video playback support, also ensure:
 
@@ -89,7 +96,13 @@ Important notes for this project
 - LEFT / RIGHT are used for topic selection and input-source selection.
 - ESTOP is a hard shutdown trigger and must remain wired to a safe shutdown pattern.
 - The MAX7219 LED matrix should be connected to the SPI bus.
-- The audio path is expected to use the USB sound card or the system audio device.
+- The Pico H microphone bridge should appear as a USB audio input device.
+- The Ask a Question flow prefers a microphone whose device name contains Pico or USB; set `NUMINA_MIC_DEVICE_INDEX` if the device needs to be selected explicitly.
+- List microphone indexes with:
+
+  python3 -c "import speech_recognition as sr; print(list(enumerate(sr.Microphone.list_microphone_names())))"
+
+- Offline spoken answers use eSpeak through the local audio output.
 - If the camera is not available, the app falls back to sample content instead of crashing.
 
 File responsibility map

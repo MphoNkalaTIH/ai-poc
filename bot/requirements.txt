@@ -5,3 +5,6 @@ RPi.GPIO
 pygame
 luma.core
 luma.led-matrix
+SpeechRecognition[audio,vosk]
+sympy
+pyttsx3

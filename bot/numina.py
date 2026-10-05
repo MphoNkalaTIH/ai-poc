@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 import os
 import io
+import json
+import math
+import re
 import selectors
 import shutil
 import subprocess
@@ -116,6 +119,13 @@ def draw_matrix_glyph(glyph_type, selected_index=None):
             for index in range(1, 7):
                 draw.point((index, index), fill="white")
                 draw.point((index, 7 - index), fill="white")
+        elif glyph_type == "listening":
+            frame = selected_index or 0
+            for x in range(8):
+                height = 1 + ((x * 3 + frame) % 4)
+                for offset in range(height):
+                    draw.point((x, 3 - offset), fill="white")
+                    draw.point((x, 4 + offset), fill="white")
 
 
 def setup_hardware_and_gui():
@@ -556,6 +566,200 @@ def gui_show_captured_image(image_path):
     
     wait_for_ui_selection(active_buttons=[(btn_rect, 0)], physical_pins=[START_PIN])
 
+
+def find_microphone_device_index(recognition_module):
+    device_names = recognition_module.Microphone.list_microphone_names()
+    configured_index = os.getenv("NUMINA_MIC_DEVICE_INDEX")
+    if configured_index:
+        index = int(configured_index)
+        if index < 0 or index >= len(device_names):
+            raise RuntimeError(f"NUMINA_MIC_DEVICE_INDEX {index} is not an available input device.")
+        return index, device_names[index]
+
+    for index, name in enumerate(device_names):
+        if name and any(token in name.casefold() for token in ("pico", "usb", "pnp")):
+            return index, name
+    return None, "system default input"
+
+
+def transcribe_question(result_queue):
+    try:
+        import speech_recognition as sr
+
+        device_index, device_name = find_microphone_device_index(sr)
+        recognizer = sr.Recognizer()
+        recognizer.pause_threshold = 0.8
+        with sr.Microphone(device_index=device_index, sample_rate=16000, chunk_size=1024) as source:
+            recognizer.adjust_for_ambient_noise(source, duration=0.5)
+            audio = recognizer.listen(source, timeout=8, phrase_time_limit=12)
+
+        recognition = recognizer.recognize_vosk(audio)
+        if isinstance(recognition, dict):
+            transcript = recognition.get("text", "").strip()
+        else:
+            try:
+                transcript = json.loads(recognition).get("text", "").strip()
+            except (json.JSONDecodeError, AttributeError):
+                transcript = recognition.strip()
+        result_queue.put({"transcript": transcript, "device": device_name})
+    except Exception as error:
+        result_queue.put({"error": str(error)})
+
+
+def solve_spoken_linear_equation(question):
+    expression = question.casefold().strip()
+    expression = re.sub(r"[?,.!]", " ", expression)
+    for spoken, symbol in (
+        ("multiplied by", "*"), ("times", "*"), ("plus", "+"),
+        ("minus", "-"), ("divided by", "/"), ("over", "/"),
+        ("equals", "="), ("equal to", "="), ("is equal to", "="),
+    ):
+        expression = re.sub(rf"\b{re.escape(spoken)}\b", symbol, expression)
+    expression = re.sub(r"\b(?:solve|what is|please|the equation|find)\b", " ", expression)
+    expression = re.sub(r"\s+", " ", expression).strip()
+    expression = re.sub(r"(?<=\d)\s+(?=x\b)", "*", expression)
+    expression = expression.replace("^", "**")
+
+    if expression.count("=") != 1 or not re.fullmatch(r"[0-9x+*/().=\-\s*]+", expression):
+        return None
+
+    left_text, right_text = expression.split("=", maxsplit=1)
+    if not left_text.strip() or not right_text.strip():
+        return None
+
+    try:
+        from sympy import Poly, Symbol, expand, simplify
+        from sympy.parsing.sympy_parser import (
+            convert_xor,
+            implicit_multiplication_application,
+            parse_expr,
+            standard_transformations,
+        )
+
+        variable = Symbol("x")
+        transformations = standard_transformations + (
+            implicit_multiplication_application,
+            convert_xor,
+        )
+        left = parse_expr(left_text, local_dict={"x": variable}, transformations=transformations)
+        right = parse_expr(right_text, local_dict={"x": variable}, transformations=transformations)
+        polynomial = Poly(expand(left - right), variable)
+        if polynomial.degree() > 1:
+            return None
+
+        coefficient = polynomial.coeff_monomial(variable)
+        constant = polynomial.coeff_monomial(1)
+        if coefficient == 0:
+            return None
+
+        solution = simplify(-constant / coefficient)
+        moved_constant = simplify(-constant)
+        steps = [
+            f"Start with {left} = {right}.",
+            f"Combine like terms: {coefficient}x = {moved_constant}.",
+            f"Divide both sides by {coefficient}.",
+            f"Solution: x = {solution}.",
+        ]
+        spoken_answer = f"The answer is x equals {solution}. " + " ".join(steps[1:3])
+        return steps, spoken_answer
+    except Exception:
+        return None
+
+
+def speak_answer(text):
+    try:
+        import pyttsx3
+
+        engine = pyttsx3.init()
+        engine.setProperty("rate", 165)
+        engine.say(text)
+        engine.runAndWait()
+        engine.stop()
+    except Exception as error:
+        print(f"Offline speech output unavailable: {error}")
+
+
+def gui_ask_question_flow():
+    draw_matrix_glyph("listening", 0)
+    question_queue = queue.Queue(maxsize=1)
+    listener = threading.Thread(target=transcribe_question, args=(question_queue,), daemon=True)
+    listener.start()
+
+    clock = pygame.time.Clock()
+    animation_start = time.monotonic()
+    result = None
+    while listener.is_alive() or question_queue.empty():
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit(0)
+
+        elapsed = time.monotonic() - animation_start
+        draw_ui_base("Ask Numina")
+        pygame.draw.rect(screen, COLOR_CARD, (70, 105, 660, 285), border_radius=14)
+        pygame.draw.circle(screen, COLOR_SELECTED_BG, (SCREEN_WIDTH // 2, 205), 56 + int(8 * math.sin(elapsed * 3)))
+        pygame.draw.circle(screen, COLOR_BG, (SCREEN_WIDTH // 2, 205), 38)
+
+        for bar in range(24):
+            height = 12 + int(42 * abs(math.sin(elapsed * 4 + bar * 0.42)))
+            x = 160 + bar * 21
+            pygame.draw.line(screen, COLOR_ACCENT_BORDER, (x, 310 - height // 2), (x, 310 + height // 2), 5)
+
+        title = font_title.render("Listening", True, COLOR_TEXT)
+        hint = font_body.render("Ask a question or say a one-variable equation", True, COLOR_TEXT)
+        timing = font_body.render("Speak naturally; pause when finished (up to 12 seconds)", True, COLOR_TEXT)
+        screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 145))
+        screen.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, 265))
+        screen.blit(timing, (SCREEN_WIDTH // 2 - timing.get_width() // 2, 350))
+        pygame.display.flip()
+        draw_matrix_glyph("listening", int(elapsed * 8) % 8)
+
+        try:
+            result = question_queue.get_nowait()
+            break
+        except queue.Empty:
+            pass
+        clock.tick(30)
+
+    if result is None:
+        result = question_queue.get()
+
+    draw_matrix_glyph("processing")
+    if result.get("error"):
+        message = result["error"]
+        draw_ui_base("Microphone or speech model unavailable")
+        render_text_wrapped(screen, message, COLOR_ALERT, (60, 135, 680, 140), font_body)
+        render_text_wrapped(screen, "Check the USB microphone, PyAudio, and the offline Vosk model.", COLOR_TEXT, (60, 290, 680, 70), font_body)
+        transcript = ""
+        steps = ["No question was processed."]
+        spoken_answer = "Please check the microphone and offline speech model setup."
+    else:
+        transcript = result.get("transcript", "")
+        solution = solve_spoken_linear_equation(transcript) if transcript else None
+        draw_ui_base("Question and Solution")
+        pygame.draw.rect(screen, COLOR_CARD, (40, 100, 720, 300), border_radius=12)
+        render_text_wrapped(screen, f"I heard: {transcript or 'No clear speech detected.'}", COLOR_TEXT, (65, 120, 670, 75), font_body)
+        if solution:
+            steps, spoken_answer = solution
+            for index, step in enumerate(steps):
+                render_text_wrapped(screen, step, COLOR_SELECTED_BG if index == len(steps) - 1 else COLOR_TEXT, (65, 205 + index * 38, 670, 38), font_body)
+        else:
+            steps = [
+                "This offline build currently solves one-variable linear equations.",
+                "Try: 3x plus 9 equals 24.",
+                "General geometry, physics, and chemistry answers need a local AI model.",
+            ]
+            spoken_answer = "I heard your question, but this offline build currently solves one-variable linear equations."
+            for index, step in enumerate(steps):
+                render_text_wrapped(screen, step, COLOR_TEXT, (65, 220 + index * 42, 670, 42), font_body)
+
+    btn_rect = (250, 415, 300, 48)
+    draw_touch_button(btn_rect, "Continue", is_selected=True)
+    pygame.display.flip()
+    threading.Thread(target=speak_answer, args=(spoken_answer,), daemon=True).start()
+    wait_for_ui_selection(active_buttons=[(btn_rect, 0)], physical_pins=[START_PIN])
+
+
 def play_audio(file_path):
     if not os.path.exists(file_path): return
     try:
@@ -608,7 +812,7 @@ def run_numina_engine():
         time.sleep(0.4)
 
         # 4. PATH TRACK SELECTOR ROUTER
-        paths = ["Run Core Lesson Video Package", "Deploy Analytical Scanner Environment", "Cancel Selection"]
+        paths = ["Run Core Lesson Video Package", "Deploy Analytical Scanner Environment", "Ask a Question", "Cancel Selection"]
         btns = render_options_menu("Choose Interaction Path Mode Pipeline", paths)
         src, idx = wait_for_ui_selection(active_buttons=btns, physical_pins=[A_PIN, B_PIN, C_PIN, D_PIN])
         chosen_path = idx if src == "touch" else [A_PIN, B_PIN, C_PIN, D_PIN].index(idx)
@@ -616,7 +820,7 @@ def run_numina_engine():
         render_options_menu("Choose Interaction Path Mode Pipeline", paths, selected_index=chosen_path)
         time.sleep(0.4)
 
-        if chosen_path == 2:
+        if chosen_path == 3:
             skip_standby = True
             continue
 
@@ -629,10 +833,12 @@ def run_numina_engine():
             btns = render_options_menu("Assessment Validation Q1: Is this homogeneous?", quiz_opts)
             wait_for_ui_selection(active_buttons=btns, physical_pins=[A_PIN, B_PIN, C_PIN, D_PIN])
             play_audio(AUDIO_FACT)
-        else:
+        elif chosen_path == 1:
             # ---- TRACK B: CAMERA LIVE PREVIEW & CAPTURE MODULE ----
             gui_live_camera_capture_flow(CAPTURE_PATH)
             gui_show_captured_image(CAPTURE_PATH)
+        else:
+            gui_ask_question_flow()
 
         # 5. SESSION CLOSEOUT AND NEXT-STEP CHOICE
         draw_matrix_glyph("complete")
