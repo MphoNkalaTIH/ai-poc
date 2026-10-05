@@ -555,13 +555,17 @@ def run_numina_engine():
         time.sleep(0.4)
 
         # 4. PATH TRACK SELECTOR ROUTER
-        paths = ["Run Core Lesson Video Package", "Deploy Analytical Scanner Environment", "Cancel Selection", "Return to Idle Loop"]
+        paths = ["Run Core Lesson Video Package", "Deploy Analytical Scanner Environment", "Cancel Selection"]
         btns = render_options_menu("Choose Interaction Path Mode Pipeline", paths)
         src, idx = wait_for_ui_selection(active_buttons=btns, physical_pins=[A_PIN, B_PIN, C_PIN, D_PIN])
         chosen_path = idx if src == "touch" else [A_PIN, B_PIN, C_PIN, D_PIN].index(idx)
         
         render_options_menu("Choose Interaction Path Mode Pipeline", paths, selected_index=chosen_path)
         time.sleep(0.4)
+
+        if chosen_path == 2:
+            skip_standby = True
+            continue
 
         if chosen_path == 0:
             # ---- TRACK A: VIDEO ENGINE LECTURE MODULE ----
