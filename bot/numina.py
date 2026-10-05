@@ -5,6 +5,7 @@ import selectors
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import queue
@@ -213,11 +214,37 @@ def gui_play_video(file_path):
         time.sleep(2)
         return
 
+    ffmpeg_binary = shutil.which("ffmpeg")
+    if not ffmpeg_binary:
+        print("Lesson playback requires ffmpeg.")
+        return
+
+    audio_path = None
+    try:
+        with tempfile.NamedTemporaryFile(prefix="numina-lesson-", suffix=".wav", delete=False) as audio_file:
+            audio_path = audio_file.name
+        audio_result = subprocess.run(
+            [ffmpeg_binary, "-y", "-i", file_path, "-vn", "-ac", "2", "-ar", "44100", "-c:a", "pcm_s16le", audio_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=180,
+        )
+        if audio_result.returncode != 0 or os.path.getsize(audio_path) == 0:
+            os.remove(audio_path)
+            audio_path = None
+        else:
+            pygame.mixer.music.load(audio_path)
+    except (OSError, pygame.error, subprocess.TimeoutExpired) as error:
+        print(f"Lesson audio unavailable; continuing video playback: {error}")
+        if audio_path and os.path.exists(audio_path):
+            os.remove(audio_path)
+        audio_path = None
+
     v_w, v_h = 720, 340
     v_x, v_y = (SCREEN_WIDTH - v_w) // 2, 82
     frame_bytes = v_w * v_h * 3
     cmd = [
-        "ffmpeg", "-re", "-i", file_path,
+        ffmpeg_binary, "-re", "-i", file_path,
         "-vf", f"scale={v_w}:{v_h}:force_original_aspect_ratio=decrease,pad={v_w}:{v_h}:(ow-iw)/2:(oh-ih)/2:color=0x0f121a",
         "-pix_fmt", "rgb24", "-f", "rawvideo", "-vsync", "0", "-"
     ]
@@ -225,7 +252,12 @@ def gui_play_video(file_path):
         pipe = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0)
     except OSError as error:
         print(f"Unable to start lesson video playback: {error}")
+        if audio_path and os.path.exists(audio_path):
+            os.remove(audio_path)
         return
+
+    if audio_path:
+        pygame.mixer.music.play()
 
     frame_queue = queue.Queue(maxsize=2)
     reader_done = threading.Event()
@@ -293,6 +325,12 @@ def gui_play_video(file_path):
             pipe.kill()
             pipe.wait()
         reader_thread.join(timeout=1)
+        if audio_path:
+            pygame.mixer.music.stop()
+            try:
+                os.remove(audio_path)
+            except FileNotFoundError:
+                pass
 
 # ==============================================================================
 # LIVE CAMERA PREVIEW BEFORE CAPTURE MODULE
