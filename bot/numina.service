@@ -10,8 +10,8 @@ Type=simple
 User=pi
 WorkingDirectory=/home/pi/numina
 Environment=PYTHONUNBUFFERED=1
-# Forces core python scripts to pipe structural stdout direct to internal kernel logs
-ExecStart=/usr/bin/python3 /home/pi/numina/numina_main.py
+# Run the current GUI app with the virtual environment containing its Python dependencies.
+ExecStart=/home/pi/numina/numina-venv/bin/python /home/pi/numina/numina.py
 Restart=always
 RestartSec=5
 

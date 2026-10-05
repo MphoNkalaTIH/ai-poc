@@ -8,10 +8,10 @@ echo "⚙️ Initializing file tracking environments..."
 mkdir -p /home/pi/numina/audio
 mkdir -p /home/pi/numina/video
 mkdir -p /home/pi/numina/capture
-# 2. Relocate script structures into internal environment context paths
-cp numina_main.py /home/pi/numina/numina_main.py
+# 2. Install the current application entry point
+cp numina.py /home/pi/numina/numina.py
 chown -R pi:pi /home/pi/numina
-chmod +x /home/pi/numina/numina_main.py
+chmod +x /home/pi/numina/numina.py
 # 3. Mount service architecture scripts directly inside Linux initialization targets
 echo "🚚 Injecting systemd boot launch hooks into system directories..."
 sudo cp numina.service /etc/systemd/system/numina.service

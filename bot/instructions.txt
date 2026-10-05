@@ -41,14 +41,19 @@ Install the required packages:
 
   sudo apt update
   sudo apt install -y python3-pip python3-dev python3-pyaudio portaudio19-dev espeak-ng
-  pip3 install -r /home/pi/numina/requirements.txt
+  cd /home/pi/numina
+  source numina-venv/bin/activate
+  python -m pip install -r requirements.txt
+  python -c "import speech_recognition as sr; print(sr.__file__)"
 
 For offline spoken questions, download the Vosk English speech model once from the project folder:
 
-  cd /home/pi/numina
-  sprc download vosk
+  sudo apt install -y unzip
+  wget https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
+  unzip vosk-model-small-en-us-0.15.zip
+  mv vosk-model-small-en-us-0.15 model
 
-The model is downloaded into the local `model` folder and does not require network access while Numina is running.
+The model is stored in `/home/pi/numina/model` and does not require network access while Numina is running. Do not use `/usr/bin/python3` for the import check while the virtual environment is active; use `python` so the check uses the same environment as Numina.
 
 For audio and video playback support, also ensure:
 
@@ -63,14 +68,17 @@ System startup
 To run the script manually:
 
   cd /home/pi/numina
-  python3 numina.py
+  source numina-venv/bin/activate
+  python numina.py
 
 To run it as a background system service:
 
   sudo cp /home/pi/numina/numina.service /etc/systemd/system/numina.service
   sudo systemctl daemon-reload
   sudo systemctl enable numina.service
-  sudo systemctl start numina.service
+  sudo systemctl restart numina.service
+
+The service runs `/home/pi/numina/numina.py` with `/home/pi/numina/numina-venv/bin/python`, matching the virtual environment used to install `requirements.txt`.
 
 Check status:
 
@@ -100,7 +108,7 @@ Important notes for this project
 - The Ask a Question flow prefers a microphone whose device name contains Pico or USB; set `NUMINA_MIC_DEVICE_INDEX` if the device needs to be selected explicitly.
 - List microphone indexes with:
 
-  python3 -c "import speech_recognition as sr; print(list(enumerate(sr.Microphone.list_microphone_names())))"
+  python -c "import speech_recognition as sr; print(list(enumerate(sr.Microphone.list_microphone_names())))"
 
 - Offline spoken answers use eSpeak through the local audio output.
 - If the camera is not available, the app falls back to sample content instead of crashing.
