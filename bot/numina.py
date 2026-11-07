@@ -47,12 +47,12 @@ MIC_SENSOR_PIN = 17
 # ============================================================================== 
 # 2. RUNTIME ASSET DIRECTORY CONVENTIONS
 # ==============================================================================
-AUDIO_INTRO = "/home/pi/numina/audio/lesson.mp3"
-AUDIO_GUIDE = "/home/pi/numina/audio/guide_step.mp3"
-AUDIO_FACT = "/home/pi/numina/audio/fun_fact.mp3"
-AUDIO_SUMMARY = "/home/pi/numina/audio/summary.mp3"
-VIDEO_LESSON = "/home/pi/numina/video/lesson.mp4"
-CAPTURE_PATH = "/home/pi/numina/capture/problem_input.jpg"
+NUMINA_HOME = os.environ.get("NUMINA_HOME", "/home/pi/numina")
+AUDIO_INTRO = os.path.join(NUMINA_HOME, "audio", "lesson.mp3")
+# Curriculum content: MATHS_ROOT/grade_<N>/<topic_folder>/{lesson.mp4,guide.mp3,fact.mp3,summary.mp3,quiz.json}
+MATHS_ROOT = os.path.join(NUMINA_HOME, "maths")
+GRADES = (9, 10, 11, 12)
+CAPTURE_PATH = os.path.join(NUMINA_HOME, "capture", "problem_input.jpg")
 
 # ============================================================================== 
 # 3. GLOBAL GUI CONFIGURATIONS (Optimised for 5-inch 800x480 screen)
@@ -537,34 +537,146 @@ def gui_live_camera_capture_flow(output_path):
     os.replace(temporary_path, output_path)
     return True
 
+OCR_OPERATOR_MAP = {
+    "\u00d7": "*", "\u2715": "*", "\u00b7": "*", "\u00f7": "/", "\u2212": "-", "\u2013": "-", "\u2014": "-",
+    "\u2236": ":", "X": "x", "\u00ab": "", "\u00bb": "",
+}
+
+
+def preprocess_image_for_ocr(image_path):
+    """Return the path of a grayscale, contrast-stretched, binarised copy suited to OCR."""
+    from PIL import Image, ImageFilter, ImageOps
+
+    with Image.open(image_path) as source:
+        image = ImageOps.exif_transpose(source).convert("L")
+    longest = max(image.size)
+    if longest > 2400 or longest < 1400:
+        scale = 2000 / longest
+        image = image.resize((max(1, int(image.width * scale)), max(1, int(image.height * scale))), Image.LANCZOS)
+    image = ImageOps.autocontrast(image, cutoff=2).filter(ImageFilter.MedianFilter(3))
+    histogram = image.histogram()
+    total = sum(histogram)
+    sum_all = sum(i * count for i, count in enumerate(histogram))
+    background = weight_bg = 0
+    best_variance = threshold = 0
+    for level, count in enumerate(histogram):
+        weight_bg += count
+        if weight_bg == 0 or weight_bg == total:
+            continue
+        background += level * count
+        mean_bg = background / weight_bg
+        mean_fg = (sum_all - background) / (total - weight_bg)
+        variance = weight_bg * (total - weight_bg) * (mean_bg - mean_fg) ** 2
+        if variance > best_variance:
+            best_variance, threshold = variance, level
+    image = image.point(lambda value: 255 if value > threshold else 0)
+    processed_path = image_path + ".ocr.png"
+    image.save(processed_path)
+    return processed_path
+
+
+def run_tesseract(image_path, page_segmentation_mode, whitelist=None):
+    command = ["tesseract", image_path, "stdout", "--psm", str(page_segmentation_mode)]
+    if whitelist:
+        command += ["-c", f"tessedit_char_whitelist={whitelist}"]
+    result = subprocess.run(command, capture_output=True, text=True, timeout=45)
+    return result.stdout if result.returncode == 0 else ""
+
+
+def normalize_ocr_line(line):
+    for source, target in OCR_OPERATOR_MAP.items():
+        line = line.replace(source, target)
+    line = re.sub(r"[|_~`]", "", line)
+    line = re.sub(r"(?<=[\dx)])\s*[:]\s*(?=[\dx(])", "/", line)
+    line = re.sub(r"x{2,}", "x", line)
+    line = re.sub(r"\s+", " ", line).strip()
+    line = re.sub(r"^(?:solve|find x|question\s*\d*|q\d+)\s*[:.)-]?\s*", "", line, flags=re.IGNORECASE)
+    return line.strip()
+
+
+def interpret_captured_image(image_path):
+    """OCR a captured problem and solve it. Returns dict with text, problem, steps, spoken, error."""
+    outcome = {"text": "", "problem": None, "steps": [], "spoken": "", "error": None}
+    if not os.path.isfile(image_path):
+        outcome["error"] = "No captured image to read."
+        return outcome
+    if not shutil.which("tesseract"):
+        outcome["error"] = "Image reader missing. Run: sudo apt install -y tesseract-ocr"
+        return outcome
+
+    processed_path = None
+    try:
+        processed_path = preprocess_image_for_ocr(image_path)
+        passes = (
+            (6, "0123456789xX+-*/=().^\u00d7\u00f7\u2212"),
+            (7, "0123456789xX+-*/=().^\u00d7\u00f7\u2212"),
+            (6, None),
+        )
+        readings = []
+        for mode, whitelist in passes:
+            raw = run_tesseract(processed_path, mode, whitelist)
+            lines = [normalize_ocr_line(line) for line in raw.splitlines()]
+            lines = [line for line in lines if line]
+            if lines and not readings:
+                readings.append(" / ".join(lines))
+            for line in lines:
+                solution = solve_linear_equation_text(line) if "=" in line else None
+                if solution:
+                    outcome.update(text=line, problem=line, steps=solution[0], spoken=solution[1])
+                    return outcome
+        outcome["text"] = readings[0] if readings else ""
+        outcome["error"] = (
+            "I could not read a solvable equation." if readings
+            else "No writing was detected. Retake in good light, flat and in focus."
+        )
+    except ImportError:
+        outcome["error"] = "Image tools missing. Run: pip install Pillow"
+    except (OSError, subprocess.TimeoutExpired) as error:
+        outcome["error"] = f"Image reading failed: {error}"
+    finally:
+        if processed_path and os.path.exists(processed_path):
+            os.remove(processed_path)
+    return outcome
+
+
 def gui_show_captured_image(image_path):
-    draw_matrix_glyph("complete")
-    draw_ui_base("Analytical Workspace Capture Resolved")
-    
-    if os.path.exists(image_path):
-        try:
-            img = pygame.image.load(image_path)
-            img = pygame.transform.scale(img, (400, 300))
-            screen.blit(img, (40, 110))
-        except Exception:
-            pass
-    else:
-        pygame.draw.rect(screen, COLOR_CARD, (40, 110, 400, 300), border_radius=8)
-        lbl = font_body.render("[Missing Capture Data Frame Asset]", True, COLOR_ALERT)
-        screen.blit(lbl, (100, 230))
-
-    pygame.draw.rect(screen, COLOR_CARD, (480, 110, 280, 300), border_radius=8)
-    lines = ["[ANALYSIS MATCHED]", "Problem: 3x + 9 = 24", "", "Step 1: Subtract 9", "        3x = 15", "Step 2: Divide by 3", "        x = 5"]
-    for i, line in enumerate(lines):
-        color = COLOR_SELECTED_BG if i == 1 else COLOR_TEXT
-        text_surf = font_body.render(line, True, color)
-        screen.blit(text_surf, (500, 130 + (i * 30)))
-
-    btn_rect = (480, 350, 280, 60)
-    draw_touch_button(btn_rect, "Continue", is_selected=True)
+    """Interpret the captured photo and show the worked solution. Returns 'retake' or 'continue'."""
+    draw_matrix_glyph("processing")
+    draw_ui_base("Reading your problem...")
     pygame.display.flip()
-    
-    wait_for_ui_selection(active_buttons=[(btn_rect, 0)], physical_pins=[START_PIN])
+    outcome = interpret_captured_image(image_path)
+    draw_matrix_glyph("complete")
+    draw_ui_base("Scanned Problem")
+
+    try:
+        img = pygame.transform.scale(pygame.image.load(image_path), (340, 255))
+        screen.blit(img, (30, 90))
+    except Exception:
+        pygame.draw.rect(screen, COLOR_CARD, (30, 90, 340, 255), border_radius=8)
+
+    pygame.draw.rect(screen, COLOR_CARD, (390, 90, 380, 255), border_radius=8)
+    if outcome["error"]:
+        render_text_wrapped(screen, outcome["error"], COLOR_ALERT, (395, 100, 370, 90), font_body)
+        if outcome["text"]:
+            render_text_wrapped(screen, f"Read: {outcome['text']}", COLOR_TEXT, (395, 195, 370, 90), font_body)
+        spoken = "I could not read that problem. Please retake the picture."
+    else:
+        render_text_wrapped(screen, f"Problem: {outcome['problem']}", COLOR_SELECTED_BG, (395, 100, 370, 50), font_body)
+        for index, step in enumerate(outcome["steps"]):
+            render_text_wrapped(screen, step, COLOR_TEXT, (395, 155 + index * 45, 370, 45), font_body)
+        spoken = outcome["spoken"]
+
+    retake_rect = (30, 370, 355, 85)
+    continue_rect = (415, 370, 355, 85)
+    draw_touch_button(retake_rect, "Retake Photo [A]")
+    draw_touch_button(continue_rect, "Continue [D]", is_selected=True)
+    pygame.display.flip()
+    threading.Thread(target=speak_answer, args=(spoken,), daemon=True).start()
+    src, value = wait_for_ui_selection(
+        active_buttons=[(retake_rect, 0), (continue_rect, 1)], physical_pins=[A_PIN, D_PIN, START_PIN]
+    )
+    wanted_retake = value == 0 if src == "touch" else value == A_PIN
+    return "retake" if wanted_retake else "continue"
 
 
 def find_microphone_device_index(recognition_module):
@@ -607,6 +719,10 @@ def transcribe_question(result_queue):
 
 
 def solve_spoken_linear_equation(question):
+    return solve_linear_equation_text(question)
+
+
+def solve_linear_equation_text(question):
     expression = question.casefold().strip()
     expression = re.sub(r"[?,.!]", " ", expression)
     for spoken, symbol in (
@@ -760,6 +876,110 @@ def gui_ask_question_flow():
     wait_for_ui_selection(active_buttons=[(btn_rect, 0)], physical_pins=[START_PIN])
 
 
+BACK = "back"
+
+
+def choose_from_menu(title, items, allow_back=True):
+    """Paged 4-slot menu. Returns the chosen item index, or BACK. Slot D is always Back when allowed."""
+    slots = 4 - (1 if allow_back else 0)
+    paged = len(items) > slots
+    per_page = slots - (1 if paged else 0)
+    page = 0
+    pins = [A_PIN, B_PIN, C_PIN, D_PIN]
+    while True:
+        start = page * per_page
+        visible = items[start:start + per_page] if paged else items
+        labels = list(visible)
+        if paged:
+            labels.append("More...")
+        entries = [("item", start + i) for i in range(len(visible))]
+        if paged:
+            entries.append(("more", None))
+        if allow_back:
+            while len(labels) < 3:
+                labels.append("")
+                entries.append(("none", None))
+            labels.append("< Back")
+            entries.append(("back", None))
+
+        buttons = render_options_menu(title, labels)
+        buttons = [(rect, i) for rect, i in buttons if entries[i][0] != "none"]
+        src, idx = wait_for_ui_selection(active_buttons=buttons, physical_pins=pins)
+        slot = idx if src == "touch" else pins.index(idx)
+        if slot >= len(entries):
+            continue
+        kind, value = entries[slot]
+        if kind == "none":
+            continue
+        render_options_menu(title, labels, selected_index=slot)
+        time.sleep(0.3)
+        if kind == "back":
+            return BACK
+        if kind == "more":
+            page = (page + 1) % ((len(items) + per_page - 1) // per_page)
+            continue
+        return value
+
+
+def list_topics(grade):
+    """Return [(display_name, folder_path)] for each topic folder under MATHS_ROOT/grade_<N>."""
+    grade_dir = os.path.join(MATHS_ROOT, f"grade_{grade}")
+    try:
+        names = sorted(n for n in os.listdir(grade_dir) if os.path.isdir(os.path.join(grade_dir, n)))
+    except OSError:
+        return []
+    return [(re.sub(r"^\d+[_-]", "", n).replace("_", " ").title(), os.path.join(grade_dir, n)) for n in names]
+
+
+def load_quiz(topic_dir):
+    try:
+        with open(os.path.join(topic_dir, "quiz.json"), "r", encoding="utf-8") as handle:
+            quiz = json.load(handle)
+        options = [str(o) for o in quiz["options"]][:4]
+        answer = int(quiz["answer"])
+        if quiz.get("question") and len(options) >= 2 and 0 <= answer < len(options):
+            return {"question": str(quiz["question"]), "options": options, "answer": answer,
+                    "explanation": str(quiz.get("explanation", ""))}
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    return None
+
+
+def gui_message(title, message, color=None):
+    draw_ui_base(title)
+    render_text_wrapped(screen, message, color or COLOR_TEXT, (60, 130, 680, 200), font_body)
+    btn_rect = (250, 380, 300, 60)
+    draw_touch_button(btn_rect, "Continue", is_selected=True)
+    pygame.display.flip()
+    wait_for_ui_selection(active_buttons=[(btn_rect, 0)], physical_pins=[START_PIN])
+
+
+def run_lesson(topic_name, topic_dir):
+    guide, video, fact, summary = (os.path.join(topic_dir, n) for n in ("guide.mp3", "lesson.mp4", "fact.mp3", "summary.mp3"))
+    if not os.path.isfile(video):
+        gui_message(topic_name, "No lesson video has been added to this topic folder yet.", COLOR_ALERT)
+        return
+    play_audio(guide)
+    gui_play_video(video)
+    quiz = load_quiz(topic_dir)
+    if quiz:
+        pick = choose_from_menu(f"Quiz: {quiz['question']}", quiz["options"], allow_back=False)
+        correct = pick == quiz["answer"]
+        gui_message("Correct!" if correct else "Not quite",
+                    quiz["explanation"] or f"The answer is: {quiz['options'][quiz['answer']]}",
+                    COLOR_SELECTED_BG if correct else COLOR_ALERT)
+    play_audio(fact)
+    play_audio(summary)
+
+
+def run_scanner():
+    while True:
+        if not gui_live_camera_capture_flow(CAPTURE_PATH):
+            return
+        if gui_show_captured_image(CAPTURE_PATH) != "retake":
+            return
+
+
 def play_audio(file_path):
     if not os.path.exists(file_path): return
     try:
@@ -772,10 +992,9 @@ def play_audio(file_path):
 # ==============================================================================
 def run_numina_engine():
     setup_hardware_and_gui()
-    skip_standby = False
 
     while True:
-        if not skip_standby:
+        if True:
             # 1. STANDBY WELCOME LAYOUT SCREEN
             draw_matrix_glyph("idle")
             screen.fill(COLOR_BG)
@@ -790,71 +1009,36 @@ def run_numina_engine():
             wait_for_ui_selection(active_buttons=[((50, 50, 700, 380), 0)], physical_pins=[START_PIN])
             draw_matrix_glyph("processing")
             play_audio(AUDIO_INTRO)
-        skip_standby = False
 
-        # 2. SELECT GRADE INTERFACE PANEL
-        menu_items = ["Grade 9 Curriculum", "Grade 10 Curriculum", "Grade 11 Curriculum", "Grade 12 Curriculum"]
-        btns = render_options_menu("Select Educational Curriculum Target Level", menu_items)
-        src, idx = wait_for_ui_selection(active_buttons=btns, physical_pins=[A_PIN, B_PIN, C_PIN, D_PIN])
-        chosen_idx = idx if src == "touch" else [A_PIN, B_PIN, C_PIN, D_PIN].index(idx)
-        
-        # Redraw with selected indicator state briefly before proceeding
-        render_options_menu("Select Educational Curriculum Target Level", menu_items, selected_index=chosen_idx)
-        time.sleep(0.4)
-
-        # 3. SELECT DOMAIN CONCEPT MATRIX TRACKER
-        concepts = ["Linear Algebra", "Geometry Proofs", "Physics Dynamics", "Chemistry Moles"]
-        btns = render_options_menu("Select Domain Subject Concept Study Module", concepts)
-        src, idx = wait_for_ui_selection(active_buttons=btns, physical_pins=[A_PIN, B_PIN, C_PIN, D_PIN])
-        chosen_concept_idx = idx if src == "touch" else [A_PIN, B_PIN, C_PIN, D_PIN].index(idx)
-        
-        render_options_menu("Select Domain Subject Concept Study Module", concepts, selected_index=chosen_concept_idx)
-        time.sleep(0.4)
-
-        # 4. PATH TRACK SELECTOR ROUTER
-        paths = ["Run Core Lesson Video Package", "Deploy Analytical Scanner Environment", "Ask a Question", "Cancel Selection"]
-        btns = render_options_menu("Choose Interaction Path Mode Pipeline", paths)
-        src, idx = wait_for_ui_selection(active_buttons=btns, physical_pins=[A_PIN, B_PIN, C_PIN, D_PIN])
-        chosen_path = idx if src == "touch" else [A_PIN, B_PIN, C_PIN, D_PIN].index(idx)
-        
-        render_options_menu("Choose Interaction Path Mode Pipeline", paths, selected_index=chosen_path)
-        time.sleep(0.4)
-
-        if chosen_path == 3:
-            skip_standby = True
-            continue
-
-        if chosen_path == 0:
-            # ---- TRACK A: VIDEO ENGINE LECTURE MODULE ----
-            play_audio(AUDIO_GUIDE)
-            gui_play_video(VIDEO_LESSON)
-            
-            quiz_opts = ["Always True (Option A)", "Conditional Variant (Option B)", "Never True (Option C)", "Insufficient Core Telemetry (Option D)"]
-            btns = render_options_menu("Assessment Validation Q1: Is this homogeneous?", quiz_opts)
-            wait_for_ui_selection(active_buttons=btns, physical_pins=[A_PIN, B_PIN, C_PIN, D_PIN])
-            play_audio(AUDIO_FACT)
-        elif chosen_path == 1:
-            # ---- TRACK B: CAMERA LIVE PREVIEW & CAPTURE MODULE ----
-            gui_live_camera_capture_flow(CAPTURE_PATH)
-            gui_show_captured_image(CAPTURE_PATH)
-        else:
-            gui_ask_question_flow()
-
-        # 5. SESSION CLOSEOUT AND NEXT-STEP CHOICE
-        draw_matrix_glyph("complete")
-        play_audio(AUDIO_SUMMARY)
+        # 2-4. GRADE -> TOPIC -> MODE, each with Back navigation
+        stage, grade, topic = "grade", None, None
         while True:
-            next_steps = ["Capture Another Problem", "Return to Categories"]
-            btns = render_options_menu("Session Complete: Choose Next Step", next_steps)
-            src, idx = wait_for_ui_selection(active_buttons=btns, physical_pins=[A_PIN, B_PIN, C_PIN, D_PIN])
-            next_step = idx if src == "touch" else [A_PIN, B_PIN, C_PIN, D_PIN].index(idx)
-
-            if next_step == 1:
-                skip_standby = True
-                break
-
-            if gui_live_camera_capture_flow(CAPTURE_PATH):
-                gui_show_captured_image(CAPTURE_PATH)
+            if stage == "grade":
+                pick = choose_from_menu("Select Grade", [f"Grade {g}" for g in GRADES], allow_back=False)
+                grade, stage = GRADES[pick], "topic"
+            elif stage == "topic":
+                topics = list_topics(grade)
+                if not topics:
+                    gui_message(f"Grade {grade}", f"No topic folders found in {os.path.join(MATHS_ROOT, f'grade_{grade}')}", COLOR_ALERT)
+                    stage = "grade"
+                    continue
+                pick = choose_from_menu(f"Grade {grade}: Choose a Topic", [t[0] for t in topics])
+                if pick == BACK:
+                    stage = "grade"
+                else:
+                    topic, stage = topics[pick], "mode"
+            else:
+                modes = ["Watch Lesson", "Scan a Problem", "Ask a Question"]
+                pick = choose_from_menu(f"{topic[0]}: What next?", modes)
+                if pick == BACK:
+                    stage = "topic"
+                elif pick == 0:
+                    run_lesson(topic[0], topic[1])
+                elif pick == 1:
+                    run_scanner()
+                else:
+                    gui_ask_question_flow()
+                draw_matrix_glyph("complete")
 
 if __name__ == "__main__":
     try:

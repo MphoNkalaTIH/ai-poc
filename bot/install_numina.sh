@@ -8,6 +8,9 @@ echo "⚙️ Initializing file tracking environments..."
 mkdir -p /home/pi/numina/audio
 mkdir -p /home/pi/numina/video
 mkdir -p /home/pi/numina/capture
+for g in 9 10 11 12; do mkdir -p /home/pi/numina/maths/grade_$g; done
+# Copy curriculum topic folders without overwriting media already placed on the device
+[ -d maths ] && cp -rn maths/. /home/pi/numina/maths/
 # 2. Install the current application entry point
 cp numina.py /home/pi/numina/numina.py
 chown -R pi:pi /home/pi/numina

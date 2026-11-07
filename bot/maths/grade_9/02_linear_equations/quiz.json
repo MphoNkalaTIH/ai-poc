@@ -1,0 +1,11 @@
+{
+  "question": "Solve 3x + 9 = 24. What is x?",
+  "options": [
+    "x = 3",
+    "x = 5",
+    "x = 11",
+    "x = 8"
+  ],
+  "answer": 1,
+  "explanation": "Subtract 9 to get 3x = 15, then divide by 3: x = 5."
+}
