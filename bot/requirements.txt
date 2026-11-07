@@ -8,3 +8,4 @@ luma.led-matrix
 SpeechRecognition[audio,vosk]
 sympy
 pyttsx3
+Pillow
