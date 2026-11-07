@@ -589,6 +589,9 @@ def normalize_ocr_line(line):
     line = re.sub(r"[|_~`]", "", line)
     line = re.sub(r"(?<=[\dx)])\s*[:]\s*(?=[\dx(])", "/", line)
     line = re.sub(r"x{2,}", "x", line)
+    line = line.replace("\u00b2", "^2").replace("\u00b3", "^3")
+    if "^" not in line:
+        line = re.sub(r"x([234])(?!\d)", r"x^\1", line)
     line = re.sub(r"\s+", " ", line).strip()
     line = re.sub(r"^(?:solve|find x|question\s*\d*|q\d+)\s*[:.)-]?\s*", "", line, flags=re.IGNORECASE)
     return line.strip()
@@ -608,8 +611,8 @@ def interpret_captured_image(image_path):
     try:
         processed_path = preprocess_image_for_ocr(image_path)
         passes = (
-            (6, "0123456789xX+-*/=().^\u00d7\u00f7\u2212"),
-            (7, "0123456789xX+-*/=().^\u00d7\u00f7\u2212"),
+            (6, "0123456789xXfyqrst+-*/=().^\u00d7\u00f7\u2212\u00b2\u00b3\u221a"),
+            (7, "0123456789xXfyqrst+-*/=().^\u00d7\u00f7\u2212\u00b2\u00b3\u221a"),
             (6, None),
         )
         readings = []
@@ -619,14 +622,13 @@ def interpret_captured_image(image_path):
             lines = [line for line in lines if line]
             if lines and not readings:
                 readings.append(" / ".join(lines))
-            for line in lines:
-                solution = solve_linear_equation_text(line) if "=" in line else None
-                if solution:
-                    outcome.update(text=line, problem=line, steps=solution[0], spoken=solution[1])
-                    return outcome
+            solution = solve_math_lines(lines)
+            if solution:
+                outcome.update(text=" / ".join(lines), problem=solution[0], steps=solution[1], spoken=solution[2])
+                return outcome
         outcome["text"] = readings[0] if readings else ""
         outcome["error"] = (
-            "I could not read a solvable equation." if readings
+            "I could not read a solvable equation, function or expression." if readings
             else "No writing was detected. Retake in good light, flat and in focus."
         )
     except ImportError:
@@ -662,7 +664,7 @@ def gui_show_captured_image(image_path):
         spoken = "I could not read that problem. Please retake the picture."
     else:
         render_text_wrapped(screen, f"Problem: {outcome['problem']}", COLOR_SELECTED_BG, (395, 100, 370, 50), font_body)
-        for index, step in enumerate(outcome["steps"]):
+        for index, step in enumerate(outcome["steps"][:4]):
             render_text_wrapped(screen, step, COLOR_TEXT, (395, 155 + index * 45, 370, 45), font_body)
         spoken = outcome["spoken"]
 
@@ -716,6 +718,125 @@ def transcribe_question(result_queue):
         result_queue.put({"transcript": transcript, "device": device_name})
     except Exception as error:
         result_queue.put({"error": str(error)})
+
+
+def format_math(expression):
+    return re.sub(r"\s*\*\s*", "", str(expression).replace("**", "^"))
+
+
+def parse_math(text):
+    """Parse printed maths in x (superscripts, sqrt, implicit multiplication) into a sympy expression."""
+    from sympy import Symbol
+    from sympy.parsing.sympy_parser import (
+        convert_xor, implicit_multiplication_application, parse_expr, standard_transformations,
+    )
+
+    text = text.replace("\u00b2", "^2").replace("\u00b3", "^3")
+    text = re.sub(r"\u221a\s*(\d+|\([^)]*\))", r"sqrt(\1)", text)
+    if not re.fullmatch(r"[0-9x+*/().\-\s^]*(?:sqrt\([^)]*\)[0-9x+*/().\-\s^]*)*", text) or not text.strip():
+        raise ValueError("unsupported characters")
+    variable = Symbol("x")
+    return parse_expr(
+        text, local_dict={"x": variable},
+        transformations=standard_transformations + (implicit_multiplication_application, convert_xor),
+    )
+
+
+def solve_polynomial_equation(left_text, right_text):
+    from sympy import Poly, Symbol, expand, factor, simplify, solveset, S, Reals, sqrt
+
+    x = Symbol("x")
+    left, right = parse_math(left_text), parse_math(right_text)
+    polynomial = Poly(expand(left - right), x)
+    degree = polynomial.degree()
+    if degree < 1 or degree > 4:
+        return None
+    if degree == 1:
+        return solve_linear_equation_text(f"{left_text} = {right_text}")
+
+    standard = expand(left - right)
+    steps = [f"Standard form: {format_math(standard)} = 0"]
+    if degree == 2:
+        a, b, c = (polynomial.coeff_monomial(x**2), polynomial.coeff_monomial(x), polynomial.coeff_monomial(1))
+        disc = simplify(b**2 - 4*a*c)
+        steps.append(f"a={a}, b={b}, c={c}; D = b^2 - 4ac = {disc}")
+        if disc < 0:
+            steps.append("D < 0, so there are no real solutions.")
+            return steps, "This quadratic has no real solutions because the discriminant is negative."
+    else:
+        steps.append(f"Factorise: {format_math(factor(standard))} = 0")
+    roots = sorted(solveset(standard, x, Reals), key=lambda r: float(r)) if solveset(standard, x, Reals) != S.EmptySet else []
+    if not roots:
+        steps.append("There are no real solutions.")
+        return steps, "There are no real solutions."
+    answer = ", ".join(f"x = {format_math(simplify(r))}" for r in roots)
+    steps.append(f"Solution: {answer}")
+    return steps, f"The solution is {answer.replace('x = ', 'x equals ')}. " + " ".join(steps[1:-1])
+
+
+def describe_function(body_text, query=None):
+    from sympy import Poly, Symbol, expand, solveset, Reals, simplify, diff
+
+    x = Symbol("x")
+    expression = parse_math(body_text)
+    steps = []
+    if query is not None:
+        value = simplify(expression.subs(x, parse_math(query)))
+        steps.append(f"f({query}) = {format_math(expression)} at x = {query}")
+        steps.append(f"f({query}) = {format_math(value)}")
+        return steps, f"f of {query} equals {format_math(value)}."
+    steps.append(f"f(x) = {format_math(expand(expression))}")
+    steps.append(f"y-intercept: f(0) = {format_math(simplify(expression.subs(x, 0)))}")
+    try:
+        roots = sorted(solveset(expression, x, Reals), key=lambda r: float(r))
+        steps.append("x-intercepts: " + (", ".join(format_math(simplify(r)) for r in roots) if roots else "none"))
+    except Exception:
+        pass
+    steps.append(f"Gradient function: f'(x) = {format_math(diff(expression, x))}")
+    return steps, "I found the intercepts of the function. " + " ".join(steps[1:3])
+
+
+def simplify_expression(text):
+    from sympy import Symbol, expand, factor, simplify
+
+    expression = parse_math(text)
+    if not expression.free_symbols:
+        value = simplify(expression)
+        return [f"{format_math(expression)} = {format_math(value)}"], f"The answer is {format_math(value)}."
+    expanded, factored = expand(expression), factor(expression)
+    steps = [f"Expanded: {format_math(expanded)}", f"Factorised: {format_math(factored)}"]
+    return steps, f"Expanded, that is {format_math(expanded)}. Factorised, it is {format_math(factored)}."
+
+
+def solve_math_lines(lines):
+    """Solve OCR lines: equations (degree 1-4), f(x) = ... with optional f(a) query, or an expression.
+    Returns (problem, steps, spoken) or None."""
+    function_body = query = None
+    for line in lines:
+        match = re.fullmatch(r"(?:f\(x\)|y)\s*=\s*(.+)", line, flags=re.IGNORECASE)
+        if match and function_body is None:
+            function_body = match.group(1)
+            continue
+        match = re.fullmatch(r"f\(\s*(-?[\d.]+)\s*\)\s*(?:=\s*\??)?", line, flags=re.IGNORECASE)
+        if match:
+            query = match.group(1)
+    try:
+        if function_body is not None:
+            result = describe_function(function_body, query)
+            return (f"f(x) = {function_body}" + (f", f({query})" if query else ""), *result)
+        for line in lines:
+            if line.count("=") == 1:
+                left, right = line.split("=")
+                if left.strip() and right.strip():
+                    result = solve_polynomial_equation(left, right)
+                    if result:
+                        return (line, *result)
+        for line in lines:
+            if "=" not in line and re.search(r"[0-9x]", line) and re.search(r"[x+\-*/^\u00b2\u221a]", line):
+                return (line, *simplify_expression(line))
+    except Exception:
+        return None
+    return None
 
 
 def solve_spoken_linear_equation(question):

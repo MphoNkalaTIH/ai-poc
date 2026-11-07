@@ -40,8 +40,8 @@ Sample folders are in the repo under bot/maths; install_numina.sh copies them. S
 
 Navigation: every menu below grade selection has a "< Back" button (slot D / GPIO D_PIN). Long lists page with "More...".
 
-Camera interpreter: "Scan a Problem" captures a photo, runs Tesseract OCR and solves one-variable linear equations
-(e.g. 3x + 9 = 24), showing steps and speaking them. Retake or Continue afterwards. Requires:
+Camera interpreter: "Scan a Problem" captures a photo, runs Tesseract OCR and solves one-variable polynomial equations up to degree 4
+(e.g. 3x + 9 = 24), quadratics and cubics (x^2 - 5x + 6 = 0), functions (f(x) = 2x + 1, optionally with a line f(3)), and expressions to expand/factorise ((x+2)(x-3)), showing steps and speaking them. Retake or Continue afterwards. Requires:
 
   sudo apt install -y tesseract-ocr
 
